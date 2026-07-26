@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v4.0
+    D3PL0Y v4.1.3
 
 .DESCRIPTION
     Aprovisionamiento idempotente, reanudable y optimizado de Windows 11.
@@ -62,8 +62,8 @@ $ProgressPreference = 'SilentlyContinue'
 
 $D3PL0Y = [ordered]@{
     Name                  = 'D3PL0Y'
-    Version               = '4.0'
-    StateSchema           = 3
+    Version               = '4.1.3'
+    StateSchema           = 4
     Root                  = 'C:\D3PL0Y'
     RepositoryRaw         = 'https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main'
     SourceMaxAgeHours     = 12
@@ -89,7 +89,6 @@ $ManagedApps = @(
     [ordered]@{ Id = 'Google.Chrome';               Required = $true  }
     [ordered]@{ Id = 'Google.GoogleDrive';          Required = $true  }
     [ordered]@{ Id = 'Tailscale.Tailscale';         Required = $true  }
-    [ordered]@{ Id = 'Git.Git';                     Required = $true  }
     [ordered]@{ Id = 'Microsoft.VisualStudioCode'; Required = $true  }
 )
 
@@ -841,10 +840,6 @@ function Test-ManagedAppFast {
                 '%LOCALAPPDATA%\Tailscale\tailscale.exe'
             )) -or ($null -ne (Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue))
         }
-        'Git.Git' {
-            return ($null -ne (Get-Command git.exe -ErrorAction SilentlyContinue)) -or
-                (Test-AnyManagedPath @('%ProgramFiles%\Git\cmd\git.exe', '%LOCALAPPDATA%\Programs\Git\cmd\git.exe'))
-        }
         'Microsoft.VisualStudioCode' {
             return ($null -ne (Get-Command code.cmd -ErrorAction SilentlyContinue)) -or
                 (Test-AnyManagedPath @(
@@ -1053,7 +1048,7 @@ function Remove-SelectedAppxPackages {
             }
             catch {
                 $Failures++
-                Write-D3PL0YLog "No se pudo desaprovisionar $Target: $($_.Exception.Message)" WARN
+                Write-D3PL0YLog ('No se pudo desaprovisionar {0}: {1}' -f $Target, $_.Exception.Message) WARN
             }
         }
     }
@@ -1486,7 +1481,7 @@ try {
             Ensure-LocalKnownFolders
         }
 
-    Invoke-D3PL0YPhase -Key 'Apps' -Name 'Verificar e instalar aplicaciones' -Revision '4.0.0' `
+    Invoke-D3PL0YPhase -Key 'Apps' -Name 'Verificar e instalar aplicaciones' -Revision '4.1.3' `
         -FingerprintData @{ Apps = $ManagedApps; UpdateApps = [bool]$UpdateApps } -AlwaysRun -Action {
             if (-not $Script:WingetAvailable) {
                 throw 'WinGet no está disponible. Instala o repara App Installer y vuelve a ejecutar la fase Apps.'
@@ -1522,30 +1517,6 @@ try {
         } -AlwaysRun -Action {
             Apply-CursorsAndWallpapers
         }
-
-    Invoke-D3PL0YPhase -Key 'Developer' -Name 'Optimizar entorno de desarrollo' -Revision '4.0.0' `
-        -FingerprintData @{ GitLongPaths = $true } -AlwaysRun -Action {
-            $Changed = 0
-            if (Get-Command git.exe -ErrorAction SilentlyContinue) {
-                $Current = (& git.exe config --system --get core.longpaths 2>$null | Out-String).Trim()
-                if ($Current -ne 'true') {
-                    Invoke-NativeCommand git.exe @('config', '--system', 'core.longpaths', 'true') -Quiet | Out-Null
-                    $Changed++
-                }
-            }
-            $DeveloperDetail = if ($Changed) {
-                'Rutas largas activadas también en Git.'
-            }
-            else {
-                'Git ya estaba optimizado o aún no estaba disponible.'
-            }
-
-            return [pscustomobject]@{
-                Changes = $Changed
-                Detail  = $DeveloperDetail
-            }
-        }
-
     Invoke-D3PL0YPhase -Key 'Shell' -Name 'Actualizar entorno gráfico' -Revision '4.0.0' `
         -FingerprintData @{ RefreshOnlyWhenChanged = $true } -AlwaysRun -Action {
             Refresh-InteractiveShell
