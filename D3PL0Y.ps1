@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v1.8
+    D3PL0Y v1.9
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -50,7 +50,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '1.8'
+$Version = '1.9'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -558,23 +558,76 @@ if (-not $SkipDebloat)
             'Microsoft.PowerAutomateDesktop'
         )
 
-        $InstalledPackages = @(
-            Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue
-        )
-
-        $ProvisionedPackages = @(
-            Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
-        )
-
         foreach ($Target in $AppsToRemove)
         {
+            $FoundPackage = $false
+
+            # Primero se elimina el aprovisionamiento de la imagen de Windows.
+            # Así la aplicación no se instalará automáticamente en usuarios nuevos.
+            $ProvisionedMatches = @(
+                Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -eq $Target }
+            )
+
+            foreach ($Package in $ProvisionedMatches)
+            {
+                $FoundPackage = $true
+
+                try
+                {
+                    Remove-AppxProvisionedPackage `
+                        -Online `
+                        -PackageName $Package.PackageName `
+                        -ErrorAction Stop | Out-Null
+
+                    Write-D3PL0YLog (
+                        'Desaprovisionado: {0}' -f $Target
+                    ) 'OK'
+                }
+                catch
+                {
+                    # Algunos builds devuelven "archivo/ruta no encontrada" aunque
+                    # el paquete ya haya desaparecido. Se comprueba de nuevo antes
+                    # de registrar una advertencia real.
+                    $StillProvisioned = @(
+                        Get-AppxProvisionedPackage `
+                            -Online `
+                            -ErrorAction SilentlyContinue |
+                        Where-Object {
+                            $_.PackageName -eq $Package.PackageName
+                        }
+                    )
+
+                    if ($StillProvisioned.Count -eq 0)
+                    {
+                        Write-D3PL0YLog (
+                            'Ya no estaba aprovisionado: {0}' -f $Target
+                        ) 'OK'
+                    }
+                    else
+                    {
+                        Write-D3PL0YWarning (
+                            'No se pudo desaprovisionar {0}. {1}' -f
+                            $Target,
+                            $_.Exception.Message
+                        )
+                    }
+                }
+            }
+
+            # Después se elimina la aplicación de los perfiles ya existentes.
+            # La consulta se hace de nuevo para evitar trabajar con datos obsoletos.
             $InstalledMatches = @(
-                $InstalledPackages |
-                Where-Object { $_.Name -eq $Target }
+                Get-AppxPackage `
+                    -AllUsers `
+                    -Name $Target `
+                    -ErrorAction SilentlyContinue
             )
 
             foreach ($Package in $InstalledMatches)
             {
+                $FoundPackage = $true
+
                 try
                 {
                     Remove-AppxPackage `
@@ -586,49 +639,63 @@ if (-not $SkipDebloat)
                 }
                 catch
                 {
-                    Write-D3PL0YWarning (
-                        'No se pudo eliminar {0}. {1}' -f
-                        $Target,
-                        $_.Exception.Message
+                    $StillInstalled = @(
+                        Get-AppxPackage `
+                            -AllUsers `
+                            -Name $Target `
+                            -ErrorAction SilentlyContinue |
+                        Where-Object {
+                            $_.PackageFullName -eq $Package.PackageFullName
+                        }
                     )
+
+                    if ($StillInstalled.Count -eq 0)
+                    {
+                        Write-D3PL0YLog (
+                            'Ya no estaba instalado: {0}' -f $Target
+                        ) 'OK'
+                    }
+                    else
+                    {
+                        Write-D3PL0YWarning (
+                            'No se pudo eliminar {0}. {1}' -f
+                            $Target,
+                            $_.Exception.Message
+                        )
+                    }
                 }
             }
 
-            $ProvisionedMatches = @(
-                $ProvisionedPackages |
+            $RemainingInstalled = @(
+                Get-AppxPackage `
+                    -AllUsers `
+                    -Name $Target `
+                    -ErrorAction SilentlyContinue
+            )
+
+            $RemainingProvisioned = @(
+                Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
                 Where-Object { $_.DisplayName -eq $Target }
             )
 
-            foreach ($Package in $ProvisionedMatches)
-            {
-                try
-                {
-                    Remove-AppxProvisionedPackage `
-                        -Online `
-                        -PackageName $Package.PackageName `
-                        -AllUsers `
-                        -ErrorAction Stop | Out-Null
-
-                    Write-D3PL0YLog (
-                        'Desaprovisionado: {0}' -f $Target
-                    ) 'OK'
-                }
-                catch
-                {
-                    Write-D3PL0YWarning (
-                        'No se pudo desaprovisionar {0}. {1}' -f
-                        $Target,
-                        $_.Exception.Message
-                    )
-                }
-            }
-
             if (
-                ($InstalledMatches.Count -eq 0) -and
-                ($ProvisionedMatches.Count -eq 0)
+                ($RemainingInstalled.Count -eq 0) -and
+                ($RemainingProvisioned.Count -eq 0)
             )
             {
-                Write-D3PL0YLog ('No estaba instalado: {0}' -f $Target)
+                if (-not $FoundPackage)
+                {
+                    Write-D3PL0YLog ('No estaba instalado: {0}' -f $Target)
+                }
+            }
+            else
+            {
+                Write-D3PL0YWarning (
+                    'Persisten restos de {0}: instalados={1}, aprovisionados={2}' -f
+                    $Target,
+                    $RemainingInstalled.Count,
+                    $RemainingProvisioned.Count
+                )
             }
         }
     } | Out-Null
