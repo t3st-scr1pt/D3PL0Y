@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v1.6
+    D3PL0Y v1.7
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -12,7 +12,7 @@
     - Configura las opciones de energía.
     - Elimina aplicaciones preinstaladas seleccionadas.
     - Reduce publicidad, sugerencias y telemetría.
-    - Instala Google Chrome, Google Drive, Tailscale, Visual Studio Code y Audacity.
+    - Instala Google Chrome, Google Drive, Tailscale y Audacity.
     - Aplica el tema oscuro, el color verde y los ajustes del Explorador.
     - Descarga y aplica cursores, fondo de escritorio y pantalla de bloqueo.
     - No modifica las rutas de Escritorio, Documentos, Descargas ni otras
@@ -50,7 +50,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '1.6'
+$Version = '1.7'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -661,7 +661,6 @@ Invoke-D3PL0YStep -Name 'Instalar aplicaciones' -Action {
         'Google.Chrome',
         'Google.GoogleDrive',
         'Tailscale.Tailscale',
-        'Microsoft.VisualStudioCode',
         'Audacity.Audacity'
     )
 
@@ -1030,7 +1029,7 @@ Log:
 $LogFile
 
 Notas:
-- Se instalan Chrome, Google Drive, Tailscale, Visual Studio Code y Audacity.
+- Se instalan Chrome, Google Drive, Tailscale y Audacity.
 - D3PL0Y no redirige las carpetas personales.
 - D3PL0Y no crea un segundo script de Google Drive.
 "@
