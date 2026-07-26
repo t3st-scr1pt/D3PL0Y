@@ -3,1243 +3,798 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v4.1.3
+    D3PL0Y v1.6
 
 .DESCRIPTION
-    Aprovisionamiento idempotente, reanudable y optimizado de Windows 11.
+    Configura un equipo con Windows 11 de forma sencilla y fiable.
 
-    D3PL0Y instala solo las aplicaciones necesarias, elimina software preinstalado
-    seleccionado, aplica la configuración visual y de privacidad, conserva las
-    carpetas personales en el almacenamiento local y evita operaciones redundantes.
-
-    No crea tareas de Google Drive, no ejecuta scripts secundarios y no redirige
-    Escritorio, Documentos, Descargas, Música, Imágenes ni Vídeos a unidades externas.
-
-.PARAMETER Force
-    Ejecuta de nuevo todas las fases aunque su punto de control siga vigente.
-
-.PARAMETER UpdateApps
-    Además de instalar aplicaciones ausentes, intenta actualizar las aplicaciones gestionadas.
+    D3PL0Y:
+    - Configura las opciones de energía.
+    - Elimina aplicaciones preinstaladas seleccionadas.
+    - Reduce publicidad, sugerencias y telemetría.
+    - Instala Google Chrome, Google Drive, Tailscale, Visual Studio Code y Audacity.
+    - Aplica el tema oscuro, el color verde y los ajustes del Explorador.
+    - Descarga y aplica cursores, fondo de escritorio y pantalla de bloqueo.
+    - No modifica las rutas de Escritorio, Documentos, Descargas ni otras
+      carpetas personales.
+    - No crea scripts secundarios ni integraciones posteriores con Google Drive.
 
 .PARAMETER NoRestart
-    Impide cualquier reinicio automático al terminar.
+    Evita que el equipo se reinicie automáticamente al finalizar.
 
-.PARAMETER OnlyPhase
-    Ejecuta únicamente las fases indicadas por su clave. Ejemplo: -OnlyPhase Apps,Assets
+.PARAMETER SkipDebloat
+    Omite la eliminación de aplicaciones preinstaladas.
 
-.PARAMETER SkipPhase
-    Omite las fases indicadas por su clave. Ejemplo: -SkipPhase Debloat
+.PARAMETER RefreshAssets
+    Fuerza la descarga de cursores y fondos aunque ya existan localmente.
 
 .EXAMPLE
     irm https://lavueltitaironica.com/install | iex
 
 .EXAMPLE
     .\D3PL0Y.ps1 -NoRestart
-
-.EXAMPLE
-    .\D3PL0Y.ps1 -Force -UpdateApps -NoRestart
-
-.EXAMPLE
-    .\D3PL0Y.ps1 -OnlyPhase Apps,Assets -NoRestart
 #>
 
 [CmdletBinding()]
 param(
-    [switch]$Force,
-    [switch]$UpdateApps,
     [switch]$NoRestart,
-    [string[]]$OnlyPhase,
-    [string[]]$SkipPhase
+    [switch]$SkipDebloat,
+    [switch]$RefreshAssets
 )
 
-Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 # =============================================================================
-# CONFIGURACIÓN CENTRAL
+# CONFIGURACIÓN
 # =============================================================================
 
-$D3PL0Y = [ordered]@{
-    Name                  = 'D3PL0Y'
-    Version               = '4.1.3'
-    StateSchema           = 4
-    Root                  = 'C:\D3PL0Y'
-    RepositoryRaw         = 'https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main'
-    SourceMaxAgeHours     = 12
-    MinimumFreeSpaceBytes = 5GB
-    LogRetention          = 20
-    AccentColor           = -15696880
-    ColorizationColor     = -1005552624
-    StartColorMenu        = -15831794
-    MouseSpeed            = '13'
-}
+$ProjectName = 'D3PL0Y'
+$Version = '1.6'
 
-$Paths = [ordered]@{
-    Root       = $D3PL0Y.Root
-    Logs       = Join-Path $D3PL0Y.Root 'Logs'
-    State      = Join-Path $D3PL0Y.Root 'State'
-    Wallpapers = Join-Path $D3PL0Y.Root 'Wallpapers'
-    Cursors    = Join-Path $D3PL0Y.Root 'Cursors'
-    Configs    = Join-Path $D3PL0Y.Root 'Configs'
-    Cache      = Join-Path $D3PL0Y.Root 'Cache'
-}
+$RootFolder = 'C:\D3PL0Y'
+$LogFolder = Join-Path $RootFolder 'Logs'
+$ConfigFolder = Join-Path $RootFolder 'Configs'
+$WallpaperFolder = Join-Path $RootFolder 'Wallpapers'
+$CursorFolder = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Cursors'
+$LockFolder = Join-Path $env:ProgramData 'D3PL0Y'
 
-$ManagedApps = @(
-    [ordered]@{ Id = 'Google.Chrome';               Required = $true  }
-    [ordered]@{ Id = 'Google.GoogleDrive';          Required = $true  }
-    [ordered]@{ Id = 'Tailscale.Tailscale';         Required = $true  }
-    [ordered]@{ Id = 'Microsoft.VisualStudioCode'; Required = $true  }
-)
+$RepositoryRaw = 'https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main'
 
-$AppsToRemove = @(
-    'Microsoft.XboxApp'
-    'Microsoft.XboxGamingOverlay'
-    'Microsoft.XboxIdentityProvider'
-    'Microsoft.XboxSpeechToTextOverlay'
-    'Microsoft.BingNews'
-    'Clipchamp.Clipchamp'
-    'Microsoft.YourPhone'
-    'MicrosoftTeams'
-    'MSTeams'
-    'Microsoft.GetHelp'
-    'Microsoft.Getstarted'
-    'Microsoft.WindowsFeedbackHub'
-    'Microsoft.ZuneMusic'
-    'Microsoft.ZuneVideo'
-    'Microsoft.People'
-    'Microsoft.MicrosoftSolitaireCollection'
-    'Microsoft.PowerAutomateDesktop'
-)
+$StatusFile = Join-Path $LogFolder 'estado.txt'
+$SummaryFile = Join-Path $LogFolder 'Resumen.txt'
+$Timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$LogFile = Join-Path $LogFolder ("install-{0}.log" -f $Timestamp)
 
-$LocalKnownFolders = @(
-    [ordered]@{ Name = 'Desktop'; RelativePath = 'Desktop' }
-    [ordered]@{ Name = 'Personal'; RelativePath = 'Documents' }
-    [ordered]@{ Name = 'My Pictures'; RelativePath = 'Pictures' }
-    [ordered]@{ Name = 'My Music'; RelativePath = 'Music' }
-    [ordered]@{ Name = 'My Video'; RelativePath = 'Videos' }
-    [ordered]@{ Name = 'Favorites'; RelativePath = 'Favorites' }
-    [ordered]@{ Name = '{374DE290-123F-4565-9164-39C4925E467B}'; RelativePath = 'Downloads' }
-    [ordered]@{ Name = '{56784854-C6CB-462B-8169-88E350ACB882}'; RelativePath = 'Contacts' }
-    [ordered]@{ Name = '{BFB9D5E0-C6A9-404C-B2B2-AE6DB6AF4968}'; RelativePath = 'Links' }
-    [ordered]@{ Name = '{4C5C32FF-BB9D-43B0-BF3E-169D1D25C7B0}'; RelativePath = 'Saved Games' }
-    [ordered]@{ Name = '{7D1D3A04-DEBB-4115-95CF-2F29DA2920DA}'; RelativePath = 'Searches' }
-)
-
-$CursorMap = [ordered]@{
-    Arrow       = 'arrow_eoa.cur'
-    AppStarting = 'busy_eoa.cur'
-    Crosshair   = 'cross_eoa.cur'
-    SizeWE      = 'ew_eoa.cur'
-    Help        = 'helpsel_eoa.cur'
-    IBeam       = 'ibeam_eoa.cur'
-    Hand        = 'link_eoa.cur'
-    SizeAll     = 'move_eoa.cur'
-    SizeNESW    = 'nesw_eoa.cur'
-    SizeNS      = 'ns_eoa.cur'
-    SizeNWSE    = 'nwse_eoa.cur'
-    NWPen       = 'pen_eoa.cur'
-    Person      = 'person_eoa.cur'
-    Pin         = 'pin_eoa.cur'
-    No          = 'unavail_eoa.cur'
-    UpArrow     = 'up_eoa.cur'
-    Wait        = 'wait_eoa.cur'
-}
-
-$Assets = [System.Collections.Generic.List[object]]::new()
-foreach ($CursorFile in $CursorMap.Values) {
-    $Assets.Add([pscustomobject]@{
-        Name        = $CursorFile
-        Uri         = "$($D3PL0Y.RepositoryRaw)/configs/cursors/$CursorFile"
-        Destination = Join-Path $Paths.Cursors $CursorFile
-        Sha256      = $null
-    })
-}
-
-$Assets.Add([pscustomobject]@{
-    Name        = 'd3pl0y.png'
-    Uri         = "$($D3PL0Y.RepositoryRaw)/wallpapers/d3pl0y.png"
-    Destination = Join-Path $Paths.Wallpapers 'd3pl0y.png'
-    Sha256      = $null
-})
-
-$Assets.Add([pscustomobject]@{
-    Name        = 'lockscreen.png'
-    Uri         = "$($D3PL0Y.RepositoryRaw)/wallpapers/lockscreen.png"
-    Destination = Join-Path $Paths.Wallpapers 'lockscreen.png'
-    Sha256      = $null
-})
+$script:SuccessCount = 0
+$script:WarningCount = 0
+$script:ErrorCount = 0
+$script:TranscriptStarted = $false
+$script:ExplorerNeedsRestart = $false
 
 # =============================================================================
-# INICIALIZACIÓN
+# FUNCIONES
 # =============================================================================
 
-foreach ($Folder in $Paths.Values) {
-    New-Item -ItemType Directory -Path $Folder -Force | Out-Null
-}
-
-$Timestamp         = Get-Date -Format 'yyyyMMdd-HHmmss'
-$LogFile           = Join-Path $Paths.Logs "d3pl0y-$Timestamp.log"
-$StatusFile        = Join-Path $Paths.Logs 'estado.txt'
-$SummaryFile       = Join-Path $Paths.Logs "resumen-$Timestamp.json"
-$LatestSummaryFile = Join-Path $Paths.Logs 'Resumen.txt'
-$StateFile         = Join-Path $Paths.State 'd3pl0y-state.json'
-$EffectiveConfig   = Join-Path $Paths.Configs 'effective-config.json'
-$WingetImportFile  = Join-Path $Paths.Cache 'winget-import.json'
-
-$Script:Results               = [System.Collections.Generic.List[object]]::new()
-$Script:LogWriter             = $null
-$Script:State                 = $null
-$Script:ExplorerRefreshNeeded = $false
-$Script:RestartRecommended    = $false
-$Script:WingetAvailable       = $false
-$Script:Changes               = 0
-$Script:Errors                = 0
-$Script:Warnings              = 0
-$Script:StartedAt             = Get-Date
-$Script:Mutex                 = $null
-$Script:MutexAcquired         = $false
-$Script:LogLinesSinceFlush     = 0
-$Script:LogFlushInterval       = 25
-
-# =============================================================================
-# LOG, ESTADO Y UTILIDADES
-# =============================================================================
-
-function Initialize-Log {
-    $Encoding = [System.Text.UTF8Encoding]::new($false)
-    $Script:LogWriter = [System.IO.StreamWriter]::new($LogFile, $true, $Encoding, 65536)
-    $Script:LogWriter.AutoFlush = $false
-}
-
-function Flush-D3PL0YLog {
-    if ($null -ne $Script:LogWriter) {
-        $Script:LogWriter.Flush()
-        $Script:LogLinesSinceFlush = 0
-    }
-}
-
-function Write-D3PL0YLog {
+function Write-D3PL0YLog
+{
     param(
-        [Parameter(Mandatory)][string]$Message,
-        [ValidateSet('INFO', 'OK', 'WARN', 'ERROR', 'SKIP')][string]$Level = 'INFO'
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [ValidateSet('INFO', 'OK', 'WARN', 'ERROR')]
+        [string]$Level = 'INFO'
     )
 
-    $Color = switch ($Level) {
+    $Color = switch ($Level)
+    {
         'OK'    { 'Green' }
         'WARN'  { 'Yellow' }
         'ERROR' { 'Red' }
-        'SKIP'  { 'DarkGray' }
         default { 'Gray' }
     }
 
-    if ($Level -eq 'WARN')  { $Script:Warnings++ }
-    if ($Level -eq 'ERROR') { $Script:Errors++ }
-
-    $Line = '[{0}] [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+    $Line = '[{0}] [{1}] {2}' -f (Get-Date -Format 'HH:mm:ss'), $Level, $Message
     Write-Host $Line -ForegroundColor $Color
-
-    if ($null -ne $Script:LogWriter) {
-        $Script:LogWriter.WriteLine($Line)
-        $Script:LogLinesSinceFlush++
-
-        if ($Level -in @('WARN', 'ERROR') -or $Script:LogLinesSinceFlush -ge $Script:LogFlushInterval) {
-            Flush-D3PL0YLog
-        }
-    }
 }
 
-function Set-D3PL0YStatus {
-    param([Parameter(Mandatory)][string]$Status)
-    [System.IO.File]::WriteAllText($StatusFile, $Status, ([System.Text.UTF8Encoding]::new($false)))
-}
-
-function Add-D3PL0YResult {
+function Set-D3PL0YStatus
+{
     param(
-        [Parameter(Mandatory)][string]$Phase,
-        [ValidateSet('OK', 'SKIP', 'WARN', 'ERROR')][string]$Status,
-        [string]$Detail,
-        [long]$DurationMs = 0,
-        [int]$Changes = 0
+        [Parameter(Mandatory = $true)]
+        [string]$Status
     )
 
-    $Script:Results.Add([pscustomobject]@{
-        Phase      = $Phase
-        Status     = $Status
-        Detail     = $Detail
-        DurationMs = $DurationMs
-        Changes    = $Changes
-        Time       = (Get-Date).ToString('s')
-    })
+    Set-Content -LiteralPath $StatusFile -Value $Status -Encoding UTF8
 }
 
-function Read-D3PL0YState {
-    $State = @{
-        Schema          = $D3PL0Y.StateSchema
-        ProjectVersion   = $D3PL0Y.Version
-        Machine         = $env:COMPUTERNAME
-        SourceUpdatedAt = $null
-        Phases           = @{}
-    }
-
-    if (-not (Test-Path -LiteralPath $StateFile)) {
-        return $State
-    }
-
-    try {
-        $Raw = Get-Content -LiteralPath $StateFile -Raw -Encoding UTF8 | ConvertFrom-Json
-
-        if ([int]$Raw.Schema -ne $D3PL0Y.StateSchema -or [string]$Raw.Machine -ne $env:COMPUTERNAME) {
-            Write-D3PL0YLog 'El estado pertenece a otro esquema o equipo; se crearán puntos de control nuevos.' WARN
-            return $State
-        }
-
-        if ($null -ne $Raw.SourceUpdatedAt) {
-            $State.SourceUpdatedAt = [string]$Raw.SourceUpdatedAt
-        }
-
-        if ($null -ne $Raw.Phases) {
-            foreach ($Property in $Raw.Phases.PSObject.Properties) {
-                $Entry = $Property.Value
-                $State.Phases[$Property.Name] = @{
-                    Fingerprint = [string]$Entry.Fingerprint
-                    Status      = [string]$Entry.Status
-                    CompletedAt = [string]$Entry.CompletedAt
-                    DurationMs  = [long]$Entry.DurationMs
-                    Detail      = [string]$Entry.Detail
-                }
-            }
-        }
-    }
-    catch {
-        Write-D3PL0YLog "El estado anterior no se pudo leer y será reconstruido: $($_.Exception.Message)" WARN
-    }
-
-    return $State
-}
-
-function Save-D3PL0YState {
-    Flush-D3PL0YLog
-    $Temporary = "$StateFile.tmp"
-    $Script:State.ProjectVersion = $D3PL0Y.Version
-    $Json = $Script:State | ConvertTo-Json -Depth 8
-    [System.IO.File]::WriteAllText($Temporary, $Json, ([System.Text.UTF8Encoding]::new($false)))
-    Move-Item -LiteralPath $Temporary -Destination $StateFile -Force
-}
-
-function Get-ObjectFingerprint {
+function Invoke-D3PL0YStep
+{
     param(
-        [Parameter(Mandatory)][string]$Revision,
-        [Parameter()][object]$Data
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Action
     )
 
-    $Payload = [ordered]@{
-        Revision = $Revision
-        Data     = $Data
-    } | ConvertTo-Json -Depth 12 -Compress
-
-    $Sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $Bytes = [System.Text.Encoding]::UTF8.GetBytes($Payload)
-        return ([System.BitConverter]::ToString($Sha.ComputeHash($Bytes))).Replace('-', '').ToLowerInvariant()
-    }
-    finally {
-        $Sha.Dispose()
-    }
-}
-
-function Test-PhaseSelected {
-    param([Parameter(Mandatory)][string]$Key)
-
-    if ($Key -eq 'Preflight') {
-        return $true
-    }
-
-    if ($OnlyPhase -and $OnlyPhase.Count -gt 0 -and $OnlyPhase -notcontains $Key) {
-        return $false
-    }
-
-    if ($SkipPhase -and $SkipPhase -contains $Key) {
-        return $false
-    }
-
-    return $true
-}
-
-function Invoke-D3PL0YPhase {
-    param(
-        [Parameter(Mandatory)][string]$Key,
-        [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][string]$Revision,
-        [Parameter()][object]$FingerprintData,
-        [Parameter(Mandatory)][scriptblock]$Action,
-        [scriptblock]$ComplianceTest,
-        [switch]$Critical,
-        [switch]$AlwaysRun
-    )
-
-    if (-not (Test-PhaseSelected -Key $Key)) {
-        Write-D3PL0YLog "Fase omitida por selección: $Key" SKIP
-        Add-D3PL0YResult -Phase $Key -Status SKIP -Detail 'Omitida mediante OnlyPhase/SkipPhase.'
-        return
-    }
-
-    $Fingerprint = Get-ObjectFingerprint -Revision $Revision -Data $FingerprintData
-    $Previous = $null
-    if ($Script:State.Phases.ContainsKey($Key)) {
-        $Previous = $Script:State.Phases[$Key]
-    }
-
-    $IsCompliant = $true
-    if ($null -ne $ComplianceTest) {
-        try {
-            $IsCompliant = [bool](& $ComplianceTest)
-        }
-        catch {
-            $IsCompliant = $false
-        }
-    }
-
-    if (-not $Force -and -not $AlwaysRun -and $IsCompliant -and $null -ne $Previous -and
-        $Previous.Status -eq 'OK' -and $Previous.Fingerprint -eq $Fingerprint) {
-        Write-D3PL0YLog "Sin cambios, se reutiliza el punto de control: $Name" SKIP
-        Add-D3PL0YResult -Phase $Key -Status SKIP -Detail "Completada previamente: $($Previous.CompletedAt)."
-        return
-    }
-
-    if (-not $IsCompliant -and $null -ne $Previous) {
-        Write-D3PL0YLog "El punto de control de $Name existe, pero el sistema ya no cumple su estado esperado." WARN
-    }
+    Write-Host ''
+    Write-Host ('=' * 64) -ForegroundColor DarkGreen
+    Write-Host $Name -ForegroundColor Green
+    Write-Host ('=' * 64) -ForegroundColor DarkGreen
 
     Set-D3PL0YStatus $Name
-    Write-D3PL0YLog "Iniciando: $Name"
-    $Watch = [System.Diagnostics.Stopwatch]::StartNew()
 
-    try {
-        $Outcome = & $Action
-        $Watch.Stop()
-
-        $Detail = 'Completado.'
-        $PhaseChanges = 0
-
-        if ($null -ne $Outcome) {
-            $LastOutcome = @($Outcome)[-1]
-            if ($LastOutcome -is [string]) {
-                $Detail = $LastOutcome
-            }
-            elseif ($LastOutcome.PSObject.Properties.Name -contains 'Detail') {
-                $Detail = [string]$LastOutcome.Detail
-                if ($LastOutcome.PSObject.Properties.Name -contains 'Changes') {
-                    $PhaseChanges = [int]$LastOutcome.Changes
-                }
-            }
-        }
-
-        $Script:Changes += $PhaseChanges
-        $Script:State.Phases[$Key] = @{
-            Fingerprint = $Fingerprint
-            Status      = 'OK'
-            CompletedAt = (Get-Date).ToString('s')
-            DurationMs  = $Watch.ElapsedMilliseconds
-            Detail      = $Detail
-        }
-        Save-D3PL0YState
-
-        Add-D3PL0YResult -Phase $Key -Status OK -Detail $Detail -DurationMs $Watch.ElapsedMilliseconds -Changes $PhaseChanges
-        Write-D3PL0YLog "Completado: $Name. $Detail" OK
+    try
+    {
+        & $Action
+        $script:SuccessCount++
+        Write-D3PL0YLog ('Completado: {0}' -f $Name) 'OK'
+        return $true
     }
-    catch {
-        $Watch.Stop()
-        $Detail = $_.Exception.Message
-
-        $Script:State.Phases[$Key] = @{
-            Fingerprint = $Fingerprint
-            Status      = 'ERROR'
-            CompletedAt = (Get-Date).ToString('s')
-            DurationMs  = $Watch.ElapsedMilliseconds
-            Detail      = $Detail
-        }
-        Save-D3PL0YState
-
-        Add-D3PL0YResult -Phase $Key -Status ERROR -Detail $Detail -DurationMs $Watch.ElapsedMilliseconds
-        Write-D3PL0YLog "Error en '$Name': $Detail" ERROR
-
-        if ($Critical) {
-            throw
-        }
-    }
-}
-
-function Invoke-NativeCommand {
-    param(
-        [Parameter(Mandatory)][string]$FilePath,
-        [Parameter()][string[]]$ArgumentList = @(),
-        [int[]]$SuccessExitCodes = @(0),
-        [switch]$IgnoreExitCode,
-        [switch]$Quiet
-    )
-
-    $Output = @(& $FilePath @ArgumentList 2>&1)
-    $ExitCode = $LASTEXITCODE
-
-    if (-not $Quiet) {
-        foreach ($Line in $Output) {
-            $Text = [string]$Line
-            if (-not [string]::IsNullOrWhiteSpace($Text)) {
-                Write-D3PL0YLog $Text
-            }
-        }
-    }
-
-    if (-not $IgnoreExitCode -and $SuccessExitCodes -notcontains $ExitCode) {
-        throw "$FilePath devolvió el código de salida $ExitCode."
-    }
-
-    return [pscustomobject]@{
-        ExitCode = $ExitCode
-        Output   = ($Output -join [Environment]::NewLine)
-    }
-}
-
-function Set-FileIfChanged {
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$Content
-    )
-
-    $Encoding = [System.Text.UTF8Encoding]::new($false)
-    $Existing = $null
-    if (Test-Path -LiteralPath $Path) {
-        $Existing = [System.IO.File]::ReadAllText($Path, $Encoding)
-    }
-
-    if ($Existing -ceq $Content) {
+    catch
+    {
+        $script:ErrorCount++
+        Write-D3PL0YLog ('Error en {0}. {1}' -f $Name, $_.Exception.Message) 'ERROR'
         return $false
     }
-
-    $Parent = Split-Path -Parent $Path
-    if ($Parent) {
-        New-Item -ItemType Directory -Path $Parent -Force | Out-Null
-    }
-
-    $Temporary = "$Path.tmp"
-    [System.IO.File]::WriteAllText($Temporary, $Content, $Encoding)
-    Move-Item -LiteralPath $Temporary -Destination $Path -Force
-    return $true
 }
 
-function Test-ByteArrayEqual {
-    param([byte[]]$First, [byte[]]$Second)
-
-    if ($null -eq $First -or $null -eq $Second -or $First.Length -ne $Second.Length) {
-        return $false
-    }
-
-    for ($Index = 0; $Index -lt $First.Length; $Index++) {
-        if ($First[$Index] -ne $Second[$Index]) {
-            return $false
-        }
-    }
-
-    return $true
-}
-
-function Test-RegistryValueEqual {
-    param($Current, $Desired)
-
-    if ($Current -is [byte[]] -and $Desired -is [byte[]]) {
-        return (Test-ByteArrayEqual -First $Current -Second $Desired)
-    }
-
-    return ([string]$Current -ceq [string]$Desired)
-}
-
-function Set-RegistryBatch {
+function Write-D3PL0YWarning
+{
     param(
-        [ValidateSet('CurrentUser', 'LocalMachine')][string]$Hive,
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][object[]]$Values
+        [Parameter(Mandatory = $true)]
+        [string]$Message
     )
 
-    $Root = if ($Hive -eq 'CurrentUser') {
-        [Microsoft.Win32.Registry]::CurrentUser
-    }
-    else {
-        [Microsoft.Win32.Registry]::LocalMachine
-    }
-
-    $Key = $Root.CreateSubKey($Path, $true)
-    if ($null -eq $Key) {
-        throw "No se pudo abrir o crear $Hive\$Path."
-    }
-
-    $Changed = 0
-    try {
-        foreach ($Entry in $Values) {
-            $Name = [string]$Entry.Name
-            $Kind = [Microsoft.Win32.RegistryValueKind][System.Enum]::Parse([Microsoft.Win32.RegistryValueKind], [string]$Entry.Kind)
-            $Desired = $Entry.Value
-            $Exists = $true
-            $Current = $null
-
-            try {
-                $Current = $Key.GetValue($Name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-                $null = $Key.GetValueKind($Name)
-            }
-            catch {
-                $Exists = $false
-            }
-
-            if (-not $Exists -or -not (Test-RegistryValueEqual -Current $Current -Desired $Desired)) {
-                $Key.SetValue($Name, $Desired, $Kind)
-                $Changed++
-            }
-        }
-    }
-    finally {
-        $Key.Dispose()
-    }
-
-    return $Changed
+    $script:WarningCount++
+    Write-D3PL0YLog $Message 'WARN'
 }
 
-function Test-PendingReboot {
-    $Checks = @(
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+function Test-D3PL0YAdministrator
+{
+    $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $Principal = New-Object Security.Principal.WindowsPrincipal($Identity)
+
+    return $Principal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
     )
-
-    foreach ($Path in $Checks) {
-        if (Test-Path -LiteralPath $Path) {
-            return $true
-        }
-    }
-
-    try {
-        $PendingRename = Get-ItemPropertyValue -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'PendingFileRenameOperations' -ErrorAction Stop
-        if ($null -ne $PendingRename) {
-            return $true
-        }
-    }
-    catch {}
-
-    return $false
 }
 
-function Remove-OldLogs {
-    $Patterns = @('d3pl0y-*.log', 'resumen-*.json')
-    foreach ($Pattern in $Patterns) {
-        Get-ChildItem -LiteralPath $Paths.Logs -Filter $Pattern -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -Skip $D3PL0Y.LogRetention |
-            Remove-Item -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# =============================================================================
-# DESCARGAS EN LOTE
-# =============================================================================
-
-function Invoke-HttpDownload {
+function Set-D3PL0YRegistryValue
+{
     param(
-        [Parameter(Mandatory)][object]$Client,
-        [Parameter(Mandatory)][string]$Uri,
-        [Parameter(Mandatory)][string]$Destination,
-        [int]$Retries = 3
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        $Value,
+
+        [ValidateSet('String', 'ExpandString', 'Binary', 'DWord', 'MultiString', 'QWord')]
+        [string]$Type = 'DWord'
     )
 
-    for ($Attempt = 1; $Attempt -le $Retries; $Attempt++) {
-        try {
-            $Bytes = $Client.GetByteArrayAsync($Uri).GetAwaiter().GetResult()
-            if ($null -eq $Bytes -or $Bytes.Length -eq 0) {
-                throw 'La descarga está vacía.'
-            }
+    if (-not (Test-Path -LiteralPath $Path))
+    {
+        New-Item -Path $Path -Force | Out-Null
+    }
 
-            [System.IO.File]::WriteAllBytes($Destination, $Bytes)
+    $CurrentValue = $null
+    $PropertyExists = $false
+
+    try
+    {
+        $CurrentValue = Get-ItemPropertyValue `
+            -LiteralPath $Path `
+            -Name $Name `
+            -ErrorAction Stop
+
+        $PropertyExists = $true
+    }
+    catch
+    {
+        $PropertyExists = $false
+    }
+
+    $ValuesMatch = $false
+
+    if ($PropertyExists)
+    {
+        if (($CurrentValue -is [byte[]]) -and ($Value -is [byte[]]))
+        {
+            $CurrentBase64 = [Convert]::ToBase64String([byte[]]$CurrentValue)
+            $ExpectedBase64 = [Convert]::ToBase64String([byte[]]$Value)
+            $ValuesMatch = ($CurrentBase64 -eq $ExpectedBase64)
+        }
+        else
+        {
+            $ValuesMatch = ([string]$CurrentValue -eq [string]$Value)
+        }
+    }
+
+    if (-not $ValuesMatch)
+    {
+        New-ItemProperty `
+            -LiteralPath $Path `
+            -Name $Name `
+            -PropertyType $Type `
+            -Value $Value `
+            -Force | Out-Null
+
+        $script:ExplorerNeedsRestart = $true
+    }
+}
+
+function Invoke-D3PL0YDownload
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Destination,
+
+        [int]$Retries = 3,
+
+        [switch]$Force
+    )
+
+    if ((Test-Path -LiteralPath $Destination) -and (-not $Force))
+    {
+        $ExistingFile = Get-Item -LiteralPath $Destination -ErrorAction SilentlyContinue
+
+        if (($null -ne $ExistingFile) -and ($ExistingFile.Length -gt 0))
+        {
+            Write-D3PL0YLog ('Ya existe: {0}' -f $Destination)
             return
         }
-        catch {
-            if ($Attempt -eq $Retries) {
+    }
+
+    $ParentFolder = Split-Path -Parent $Destination
+
+    if (-not (Test-Path -LiteralPath $ParentFolder))
+    {
+        New-Item -ItemType Directory -Path $ParentFolder -Force | Out-Null
+    }
+
+    $TemporaryFile = '{0}.download' -f $Destination
+    Remove-Item -LiteralPath $TemporaryFile -Force -ErrorAction SilentlyContinue
+
+    for ($Attempt = 1; $Attempt -le $Retries; $Attempt++)
+    {
+        try
+        {
+            Invoke-WebRequest `
+                -Uri $Uri `
+                -OutFile $TemporaryFile `
+                -UseBasicParsing `
+                -TimeoutSec 90
+
+            $DownloadedFile = Get-Item -LiteralPath $TemporaryFile -ErrorAction Stop
+
+            if ($DownloadedFile.Length -le 0)
+            {
+                throw 'El archivo descargado está vacío.'
+            }
+
+            Move-Item `
+                -LiteralPath $TemporaryFile `
+                -Destination $Destination `
+                -Force
+
+            Write-D3PL0YLog ('Descargado: {0}' -f $Destination) 'OK'
+            return
+        }
+        catch
+        {
+            Remove-Item -LiteralPath $TemporaryFile -Force -ErrorAction SilentlyContinue
+
+            if ($Attempt -ge $Retries)
+            {
                 throw
             }
 
-            Write-D3PL0YLog "Descarga fallida ($Attempt/$Retries): $Uri" WARN
-            Start-Sleep -Seconds (2 * $Attempt)
+            Write-D3PL0YWarning (
+                'Descarga fallida. Reintento {0} de {1}: {2}' -f
+                $Attempt,
+                $Retries,
+                $Uri
+            )
+
+            Start-Sleep -Seconds (3 * $Attempt)
         }
     }
 }
 
-function Sync-AssetBatch {
+function Test-D3PL0YWingetPackage
+{
     param(
-        [Parameter(Mandatory)][object[]]$AssetList,
-        [switch]$RefreshExisting
+        [Parameter(Mandatory = $true)]
+        [string]$Id
     )
 
-    $DownloadList = [System.Collections.Generic.List[object]]::new()
-    foreach ($Asset in $AssetList) {
-        $NeedsDownload = $RefreshExisting -or -not (Test-Path -LiteralPath $Asset.Destination)
-        if (-not $NeedsDownload) {
-            try {
-                $NeedsDownload = (Get-Item -LiteralPath $Asset.Destination).Length -le 0
-            }
-            catch {
-                $NeedsDownload = $true
-            }
-        }
+    $Output = & winget.exe list `
+        --id $Id `
+        --exact `
+        --accept-source-agreements 2>$null | Out-String
 
-        if ($NeedsDownload) {
-            $DownloadList.Add($Asset)
-        }
-    }
-
-    if ($DownloadList.Count -eq 0) {
-        Write-D3PL0YLog 'Todos los recursos visuales están presentes; no se abre ninguna conexión de red.' SKIP
-        return 0
-    }
-
-    foreach ($Asset in $DownloadList) {
-        $Parent = Split-Path -Parent $Asset.Destination
-        New-Item -ItemType Directory -Path $Parent -Force | Out-Null
-        Remove-Item -LiteralPath "$($Asset.Destination).download" -Force -ErrorAction SilentlyContinue
-    }
-
-    $HttpSucceeded = $false
-    try {
-        Add-Type -AssemblyName System.Net.Http
-        [Net.ServicePointManager]::DefaultConnectionLimit = [Math]::Max([Net.ServicePointManager]::DefaultConnectionLimit, 8)
-
-        $Handler = [System.Net.Http.HttpClientHandler]::new()
-        if ($Handler.PSObject.Properties.Name -contains 'MaxConnectionsPerServer') {
-            $Handler.MaxConnectionsPerServer = 8
-        }
-
-        $Client = [System.Net.Http.HttpClient]::new($Handler)
-        $Client.Timeout = [TimeSpan]::FromSeconds(90)
-        $Client.DefaultRequestHeaders.UserAgent.ParseAdd('D3PL0Y/4.0')
-
-        try {
-            $Pending = [System.Collections.Generic.List[object]]::new()
-            foreach ($Asset in $DownloadList) {
-                $Pending.Add([pscustomobject]@{
-                    Asset = $Asset
-                    Task  = $Client.GetByteArrayAsync([string]$Asset.Uri)
-                })
-            }
-
-            Write-D3PL0YLog "Descargando $($DownloadList.Count) recursos mediante HTTP concurrente limitado a 8 conexiones."
-
-            foreach ($Item in $Pending) {
-                $Temporary = "$($Item.Asset.Destination).download"
-                try {
-                    $Bytes = $Item.Task.GetAwaiter().GetResult()
-                    if ($null -eq $Bytes -or $Bytes.Length -eq 0) {
-                        throw 'La descarga está vacía.'
-                    }
-                    [System.IO.File]::WriteAllBytes($Temporary, $Bytes)
-                }
-                catch {
-                    Write-D3PL0YLog "La descarga concurrente de $($Item.Asset.Name) falló; se reintentará de forma individual." WARN
-                    Invoke-HttpDownload -Client $Client -Uri $Item.Asset.Uri -Destination $Temporary
-                }
-            }
-
-            $HttpSucceeded = $true
-        }
-        finally {
-            $Client.Dispose()
-            $Handler.Dispose()
-        }
-    }
-    catch {
-        Write-D3PL0YLog "HTTP concurrente no pudo completar el lote; se usará BITS: $($_.Exception.Message)" WARN
-    }
-
-    if (-not $HttpSucceeded) {
-        if (-not (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue)) {
-            throw 'No están disponibles ni HTTP concurrente ni BITS para descargar los recursos.'
-        }
-
-        $Sources = @($DownloadList | ForEach-Object { [string]$_.Uri })
-        $Destinations = @($DownloadList | ForEach-Object { "$($_.Destination).download" })
-        Start-BitsTransfer -Source $Sources -Destination $Destinations -TransferType Download `
-            -Priority Foreground -DisplayName 'D3PL0Y Assets' -ErrorAction Stop
-    }
-
-    $Changed = 0
-    foreach ($Asset in $DownloadList) {
-        $Temporary = "$($Asset.Destination).download"
-
-        if (-not (Test-Path -LiteralPath $Temporary) -or (Get-Item -LiteralPath $Temporary).Length -le 0) {
-            throw "El recurso $($Asset.Name) no se descargó correctamente."
-        }
-
-        if ($Asset.Sha256) {
-            $ActualHash = (Get-FileHash -LiteralPath $Temporary -Algorithm SHA256).Hash
-            if ($ActualHash -ne $Asset.Sha256) {
-                throw "El hash SHA-256 de $($Asset.Name) no coincide."
-            }
-        }
-
-        $Same = $false
-        if (Test-Path -LiteralPath $Asset.Destination) {
-            $OldHash = (Get-FileHash -LiteralPath $Asset.Destination -Algorithm SHA256).Hash
-            $NewHash = (Get-FileHash -LiteralPath $Temporary -Algorithm SHA256).Hash
-            $Same = ($OldHash -eq $NewHash)
-        }
-
-        if ($Same) {
-            Remove-Item -LiteralPath $Temporary -Force
-        }
-        else {
-            Move-Item -LiteralPath $Temporary -Destination $Asset.Destination -Force
-            $Changed++
-        }
-    }
-
-    return $Changed
+    return (
+        ($LASTEXITCODE -eq 0) -and
+        ($Output -match [regex]::Escape($Id))
+    )
 }
 
-function Test-AnyManagedPath {
-    param([Parameter(Mandatory)][string[]]$PathsToTest)
+function Install-D3PL0YWingetPackage
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Id
+    )
 
-    foreach ($Candidate in $PathsToTest) {
-        if ([string]::IsNullOrWhiteSpace($Candidate)) {
-            continue
-        }
-
-        $Expanded = [Environment]::ExpandEnvironmentVariables($Candidate)
-        if (Test-Path -Path $Expanded) {
-            return $true
-        }
-    }
-
-    return $false
-}
-
-function Test-ManagedAppFast {
-    param([Parameter(Mandatory)][string]$Id)
-
-    switch ($Id) {
-        'Google.Chrome' {
-            return Test-AnyManagedPath @(
-                '%ProgramFiles%\Google\Chrome\Application\chrome.exe'
-                '%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe'
-                '%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe'
-            )
-        }
-        'Google.GoogleDrive' {
-            return Test-AnyManagedPath @(
-                '%ProgramFiles%\Google\Drive File Stream\GoogleDriveFS.exe'
-                '%ProgramFiles%\Google\Drive File Stream\*\GoogleDriveFS.exe'
-                '%LOCALAPPDATA%\Google\DriveFS\GoogleDriveFS.exe'
-            )
-        }
-        'Tailscale.Tailscale' {
-            return (Test-AnyManagedPath @(
-                '%ProgramFiles%\Tailscale\tailscale.exe'
-                '%LOCALAPPDATA%\Tailscale\tailscale.exe'
-            )) -or ($null -ne (Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue))
-        }
-        'Microsoft.VisualStudioCode' {
-            return ($null -ne (Get-Command code.cmd -ErrorAction SilentlyContinue)) -or
-                (Test-AnyManagedPath @(
-                    '%ProgramFiles%\Microsoft VS Code\Code.exe'
-                    '%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe'
-                ))
-        }
-        default {
-            return $false
-        }
-    }
-}
-
-# =============================================================================
-# WINGET EN BLOQUE
-# =============================================================================
-
-function Update-WingetSourceIfNeeded {
-    if (-not $Script:WingetAvailable) {
+    if (Test-D3PL0YWingetPackage -Id $Id)
+    {
+        Write-D3PL0YLog ('Ya está instalado: {0}' -f $Id) 'OK'
         return
     }
 
-    $NeedsUpdate = $true
-    if ($Script:State.SourceUpdatedAt) {
-        try {
-            $LastUpdate = [datetime]::Parse($Script:State.SourceUpdatedAt)
-            $NeedsUpdate = ((Get-Date) - $LastUpdate).TotalHours -ge $D3PL0Y.SourceMaxAgeHours
-        }
-        catch {
-            $NeedsUpdate = $true
-        }
-    }
+    Write-D3PL0YLog ('Instalando: {0}' -f $Id)
 
-    if (-not $NeedsUpdate -and -not $Force) {
-        Write-D3PL0YLog 'Las fuentes de WinGet siguen recientes; se evita una actualización redundante.' SKIP
-        return
-    }
+    & winget.exe install `
+        --id $Id `
+        --exact `
+        --silent `
+        --disable-interactivity `
+        --accept-package-agreements `
+        --accept-source-agreements
 
-    $Result = Invoke-NativeCommand -FilePath 'winget.exe' -ArgumentList @(
-        'source', 'update', '--disable-interactivity', '--nowarn'
-    ) -IgnoreExitCode
+    $InstallExitCode = $LASTEXITCODE
 
-    if ($Result.ExitCode -eq 0) {
-        $Script:State.SourceUpdatedAt = (Get-Date).ToString('s')
-        Save-D3PL0YState
-    }
-    else {
-        Write-D3PL0YLog 'No se pudieron actualizar las fuentes de WinGet; se continuará con la caché disponible.' WARN
-    }
-}
-
-function New-WinGetImportManifest {
-    param([Parameter(Mandatory)][string[]]$PackageIds)
-
-    $Packages = foreach ($Id in $PackageIds) {
-        [ordered]@{ PackageIdentifier = $Id }
-    }
-
-    $Manifest = [ordered]@{
-        '$schema'    = 'https://aka.ms/winget-packages.schema.2.0.json'
-        CreationDate = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
-        Sources       = @(
-            [ordered]@{
-                Packages      = @($Packages)
-                SourceDetails = [ordered]@{
-                    Argument   = 'https://cdn.winget.microsoft.com/cache'
-                    Identifier = 'Microsoft.Winget.Source_8wekyb3d8bbwe'
-                    Name       = 'winget'
-                    Type       = 'Microsoft.PreIndexed.Package'
-                }
-            }
+    if (
+        ($InstallExitCode -ne 0) -and
+        (-not (Test-D3PL0YWingetPackage -Id $Id))
+    )
+    {
+        throw (
+            'WinGet no pudo instalar {0}. Código de salida: {1}' -f
+            $Id,
+            $InstallExitCode
         )
     }
 
-    $Json = $Manifest | ConvertTo-Json -Depth 8
-    [System.IO.File]::WriteAllText($WingetImportFile, $Json, ([System.Text.UTF8Encoding]::new($false)))
+    Write-D3PL0YLog ('Instalado: {0}' -f $Id) 'OK'
 }
 
-function Install-ManagedApplications {
-    $DesiredIds = @($ManagedApps | ForEach-Object { [string]$_.Id })
-    $RequiredIds = @($ManagedApps | Where-Object Required | ForEach-Object { [string]$_.Id })
-    $MissingBefore = @($DesiredIds | Where-Object { -not (Test-ManagedAppFast -Id $_) })
-    $Changes = 0
+function Restart-D3PL0YExplorer
+{
+    Write-D3PL0YLog 'Actualizando la configuración visual de Windows.'
 
-    if ($MissingBefore.Count -eq 0 -and -not $UpdateApps) {
-        Write-D3PL0YLog 'Todas las aplicaciones se detectaron localmente; WinGet no necesita iniciarse.' SKIP
-        return [pscustomobject]@{
-            Changes = 0
-            Detail  = "$($DesiredIds.Count) aplicaciones verificadas mediante detección local rápida; cero procesos de WinGet."
-        }
-    }
+    & rundll32.exe user32.dll,UpdatePerUserSystemParameters
+    Start-Sleep -Seconds 2
 
-    Update-WingetSourceIfNeeded
+    Stop-Process `
+        -Name explorer `
+        -Force `
+        -ErrorAction SilentlyContinue
 
-    if ($MissingBefore.Count -gt 0) {
-        Write-D3PL0YLog "Aplicaciones ausentes según detección local: $($MissingBefore -join ', ')"
-        New-WinGetImportManifest -PackageIds $MissingBefore
-
-        $Import = Invoke-NativeCommand -FilePath 'winget.exe' -ArgumentList @(
-            'import', '--import-file', $WingetImportFile,
-            '--ignore-unavailable', '--ignore-versions',
-            '--accept-package-agreements', '--accept-source-agreements',
-            '--disable-interactivity', '--nowarn'
-        ) -IgnoreExitCode
-
-        if ($Import.ExitCode -ne 0) {
-            Write-D3PL0YLog 'La instalación en bloque terminó con incidencias; se comprobarán únicamente los paquetes pendientes.' WARN
-        }
-
-        $StillMissing = @($RequiredIds | Where-Object { -not (Test-ManagedAppFast -Id $_) })
-        $Changes = $MissingBefore.Count - @($MissingBefore | Where-Object { $StillMissing -contains $_ }).Count
-
-        if ($StillMissing.Count -gt 0) {
-            Write-D3PL0YLog "Reintento individual para: $($StillMissing -join ', ')" WARN
-
-            foreach ($Id in @($StillMissing)) {
-                $Retry = Invoke-NativeCommand -FilePath 'winget.exe' -ArgumentList @(
-                    'install', '--id', $Id, '--exact', '--silent',
-                    '--accept-package-agreements', '--accept-source-agreements',
-                    '--disable-interactivity', '--nowarn'
-                ) -IgnoreExitCode
-
-                if ($Retry.ExitCode -ne 0) {
-                    Write-D3PL0YLog "El reintento de $Id devolvió $($Retry.ExitCode)." WARN
-                }
-            }
-
-            $StillMissing = @($RequiredIds | Where-Object { -not (Test-ManagedAppFast -Id $_) })
-        }
-
-        if ($StillMissing.Count -gt 0) {
-            throw "No se pudieron instalar estas aplicaciones obligatorias: $($StillMissing -join ', ')."
-        }
-
-        $Changes = $MissingBefore.Count
-        if ($Changes -gt 0) {
-            $Script:RestartRecommended = $true
-        }
-    }
-
-    $UpdateChecks = 0
-    if ($UpdateApps) {
-        Write-D3PL0YLog 'Comprobando actualizaciones de las aplicaciones gestionadas.'
-
-        foreach ($Id in $DesiredIds) {
-            $Upgrade = Invoke-NativeCommand -FilePath 'winget.exe' -ArgumentList @(
-                'upgrade', '--id', $Id, '--exact', '--silent',
-                '--accept-package-agreements', '--accept-source-agreements',
-                '--disable-interactivity', '--nowarn'
-            ) -IgnoreExitCode -Quiet
-
-            $UpdateChecks++
-            if ($Upgrade.ExitCode -notin @(0, -1978335189, -1978335212)) {
-                Write-D3PL0YLog "La comprobación de actualización de $Id devolvió $($Upgrade.ExitCode); se conserva la instalación actual." WARN
-            }
-        }
-    }
-
-    $DetailText = if ($Changes -gt 0 -and $UpdateApps) {
-        "$Changes aplicaciones instaladas y $UpdateChecks actualizaciones comprobadas."
-    }
-    elseif ($Changes -gt 0) {
-        "$Changes aplicaciones instaladas; $($DesiredIds.Count) verificadas."
-    }
-    elseif ($UpdateApps) {
-        "$UpdateChecks aplicaciones verificadas para actualización; no faltaba ninguna."
-    }
-    else {
-        "$($DesiredIds.Count) aplicaciones verificadas; no faltaba ninguna."
-    }
-
-    return [pscustomobject]@{
-        Changes = $Changes
-        Detail  = $DetailText
-    }
+    Start-Sleep -Seconds 2
+    Start-Process explorer.exe
 }
 
 # =============================================================================
-# FASES DE CONFIGURACIÓN
+# PREPARACIÓN
 # =============================================================================
 
-function Remove-SelectedAppxPackages {
-    $InstalledPackages = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue)
-    $ProvisionedPackages = @(Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue)
-    $Removed = 0
-    $Failures = 0
-
-    foreach ($Target in $AppsToRemove) {
-        foreach ($Package in @($InstalledPackages | Where-Object { $_.Name -eq $Target })) {
-            try {
-                Remove-AppxPackage -Package $Package.PackageFullName -AllUsers -ErrorAction Stop
-                $Removed++
-                Write-D3PL0YLog "Eliminado AppX: $($Package.Name)" OK
-            }
-            catch {
-                $Failures++
-                Write-D3PL0YLog "No se pudo eliminar $($Package.Name): $($_.Exception.Message)" WARN
-            }
-        }
-
-        foreach ($Package in @($ProvisionedPackages | Where-Object { $_.DisplayName -eq $Target })) {
-            try {
-                Remove-AppxProvisionedPackage -Online -PackageName $Package.PackageName -AllUsers -ErrorAction Stop | Out-Null
-                $Removed++
-                Write-D3PL0YLog "Desaprovisionado AppX: $Target" OK
-            }
-            catch {
-                $Failures++
-                Write-D3PL0YLog ('No se pudo desaprovisionar {0}: {1}' -f $Target, $_.Exception.Message) WARN
-            }
-        }
-    }
-
-    if ($Removed -gt 0) {
-        $Script:RestartRecommended = $true
-    }
-
-    return [pscustomobject]@{
-        Changes = $Removed
-        Detail  = "$Removed paquetes eliminados; $Failures incidencias no críticas."
-    }
+foreach ($Folder in @(
+    $RootFolder,
+    $LogFolder,
+    $ConfigFolder,
+    $WallpaperFolder,
+    $CursorFolder,
+    $LockFolder
+))
+{
+    New-Item -ItemType Directory -Path $Folder -Force | Out-Null
 }
 
-function Remove-ObsoleteDriveAutomation {
-    $Removed = 0
+try
+{
+    Start-Transcript -Path $LogFile -Append | Out-Null
+    $script:TranscriptStarted = $true
+}
+catch
+{
+    Write-Host 'No se pudo iniciar la transcripción completa.' -ForegroundColor Yellow
+}
 
-    if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
-        foreach ($Task in @(Get-ScheduledTask -ErrorAction SilentlyContinue)) {
-            $ActionText = (@($Task.Actions) | ForEach-Object {
-                '{0} {1}' -f ([string]$_.Execute), ([string]$_.Arguments)
-            }) -join ' '
+Set-D3PL0YStatus 'INICIANDO D3PL0Y'
 
-            $Description = [string]$Task.Description
-            $IsObsolete = $ActionText -match '(?i)PrimerInicio\.ps1|[^\s"'']*Drive[^\s"'']*\.ps1' -or
-                $Description -match '(?i)integraci[oó]n.+Google Drive|Google Drive.+primer inicio'
+$Banner = @"
 
-            if (-not $IsObsolete) {
-                continue
-            }
+██████╗ ██████╗ ██████╗ ██╗      ██████╗ ██╗   ██╗
+██╔══██╗╚════██╗██╔══██╗██║     ██╔═████╗╚██╗ ██╔╝
+██║  ██║ █████╔╝██████╔╝██║     ██║██╔██║ ╚████╔╝
+██║  ██║ ╚═══██╗██╔═══╝ ██║     ████╔╝██║  ╚██╔╝
+██████╔╝██████╔╝██║     ███████╗╚██████╔╝   ██║
+╚═════╝ ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝    ╚═╝
 
-            foreach ($Action in @($Task.Actions)) {
-                $Arguments = [string]$Action.Arguments
-                if ($Arguments -match '(?i)-File\s+(?:"([^"]+)"|''([^'']+)''|(\S+))') {
-                    $HelperPath = @($Matches[1], $Matches[2], $Matches[3]) |
-                        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-                        Select-Object -First 1
+╔════════════════════════════════════════════════════╗
+║                    D3PL0Y                          ║
+║                                                    ║
+║   Instalación automática de aplicaciones           ║
+║   Configuración personalizada de Windows 11         ║
+║   Sin redirección de carpetas a Google Drive        ║
+║   Preparado para CEREBRO                            ║
+╚════════════════════════════════════════════════════╝
 
-                    if ($HelperPath -and [IO.Path]::GetFileName($HelperPath) -ieq 'PrimerInicio.ps1') {
-                        Remove-Item -LiteralPath $HelperPath -Force -ErrorAction SilentlyContinue
-                    }
+"@
+
+Write-Host $Banner -ForegroundColor Green
+
+$Date = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
+$Computer = $env:COMPUTERNAME
+$User = $env:USERNAME
+
+Write-Host '┌────────────────────────────────────────────────────┐' -ForegroundColor DarkGreen
+Write-Host '│                  D3PL0Y STATUS                     │' -ForegroundColor DarkGreen
+Write-Host '├────────────────────────────────────────────────────┤' -ForegroundColor DarkGreen
+Write-Host ('│ HOSTNAME : {0,-38}│' -f $Computer) -ForegroundColor Green
+Write-Host ('│ USER     : {0,-38}│' -f $User) -ForegroundColor Green
+Write-Host ('│ DATE     : {0,-38}│' -f $Date) -ForegroundColor Green
+Write-Host ('│ VERSION  : {0,-38}│' -f ('v{0}' -f $Version)) -ForegroundColor Green
+Write-Host ('│ STATUS   : {0,-38}│' -f 'INITIALIZING') -ForegroundColor Yellow
+Write-Host '└────────────────────────────────────────────────────┘' -ForegroundColor DarkGreen
+
+# =============================================================================
+# EJECUCIÓN
+# =============================================================================
+
+Invoke-D3PL0YStep -Name 'Comprobaciones previas' -Action {
+
+    if (-not (Test-D3PL0YAdministrator))
+    {
+        throw 'D3PL0Y debe ejecutarse como administrador.'
+    }
+
+    $OperatingSystem = Get-CimInstance Win32_OperatingSystem
+
+    if ([version]$OperatingSystem.Version -lt [version]'10.0.22000')
+    {
+        throw (
+            'D3PL0Y requiere Windows 11. Versión detectada: {0}' -f
+            $OperatingSystem.Version
+        )
+    }
+
+    if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue))
+    {
+        throw (
+            'WinGet no está disponible. Instala o actualiza ' +
+            'App Installer desde Microsoft Store.'
+        )
+    }
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    & winget.exe source update | Out-Null
+
+    if ($LASTEXITCODE -ne 0)
+    {
+        Write-D3PL0YWarning 'No se pudieron actualizar las fuentes de WinGet.'
+    }
+} | Out-Null
+
+Invoke-D3PL0YStep -Name 'Configurar energía' -Action {
+
+    $PowerCommands = @(
+        @('-h', 'off'),
+        @('/change', 'standby-timeout-ac', '0'),
+        @('/change', 'monitor-timeout-ac', '0'),
+        @('/change', 'standby-timeout-dc', '0'),
+        @('/change', 'monitor-timeout-dc', '0')
+    )
+
+    foreach ($Arguments in $PowerCommands)
+    {
+        & powercfg.exe @Arguments | Out-Null
+
+        if ($LASTEXITCODE -ne 0)
+        {
+            Write-D3PL0YWarning (
+                'Powercfg devolvió un error para: {0}' -f
+                ($Arguments -join ' ')
+            )
+        }
+    }
+} | Out-Null
+
+if (-not $SkipDebloat)
+{
+    Invoke-D3PL0YStep -Name 'Eliminar aplicaciones preinstaladas' -Action {
+
+        $AppsToRemove = @(
+            'Microsoft.XboxApp',
+            'Microsoft.XboxGamingOverlay',
+            'Microsoft.XboxIdentityProvider',
+            'Microsoft.XboxSpeechToTextOverlay',
+            'Microsoft.BingNews',
+            'Clipchamp.Clipchamp',
+            'Microsoft.YourPhone',
+            'MicrosoftTeams',
+            'MSTeams',
+            'Microsoft.GetHelp',
+            'Microsoft.Getstarted',
+            'Microsoft.WindowsFeedbackHub',
+            'Microsoft.ZuneMusic',
+            'Microsoft.ZuneVideo',
+            'Microsoft.People',
+            'Microsoft.MicrosoftSolitaireCollection',
+            'Microsoft.PowerAutomateDesktop'
+        )
+
+        $InstalledPackages = @(
+            Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+        )
+
+        $ProvisionedPackages = @(
+            Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+        )
+
+        foreach ($Target in $AppsToRemove)
+        {
+            $InstalledMatches = @(
+                $InstalledPackages |
+                Where-Object { $_.Name -eq $Target }
+            )
+
+            foreach ($Package in $InstalledMatches)
+            {
+                try
+                {
+                    Remove-AppxPackage `
+                        -Package $Package.PackageFullName `
+                        -AllUsers `
+                        -ErrorAction Stop
+
+                    Write-D3PL0YLog ('Eliminado: {0}' -f $Target) 'OK'
+                }
+                catch
+                {
+                    Write-D3PL0YWarning (
+                        'No se pudo eliminar {0}. {1}' -f
+                        $Target,
+                        $_.Exception.Message
+                    )
                 }
             }
 
-            try {
-                Unregister-ScheduledTask -TaskName $Task.TaskName -TaskPath $Task.TaskPath `
-                    -Confirm:$false -ErrorAction Stop
-                $Removed++
-                Write-D3PL0YLog "Automatización antigua de Google Drive eliminada: $($Task.TaskPath)$($Task.TaskName)" OK
-            }
-            catch {
-                Write-D3PL0YLog "No se pudo eliminar la tarea antigua $($Task.TaskName): $($_.Exception.Message)" WARN
-            }
-        }
-    }
+            $ProvisionedMatches = @(
+                $ProvisionedPackages |
+                Where-Object { $_.DisplayName -eq $Target }
+            )
 
-    $StartupFolder = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
-    if (Test-Path -LiteralPath $StartupFolder) {
-        $Shell = New-Object -ComObject WScript.Shell
-        foreach ($ShortcutFile in @(Get-ChildItem -LiteralPath $StartupFolder -Filter '*.lnk' -File -ErrorAction SilentlyContinue)) {
-            try {
-                $Shortcut = $Shell.CreateShortcut($ShortcutFile.FullName)
-                $ShortcutText = '{0} {1}' -f ([string]$Shortcut.TargetPath), ([string]$Shortcut.Arguments)
-                if ($ShortcutText -match '(?i)PrimerInicio\.ps1|[^\s"'']*Drive[^\s"'']*\.ps1') {
-                    Remove-Item -LiteralPath $ShortcutFile.FullName -Force -ErrorAction Stop
-                    $Removed++
-                    Write-D3PL0YLog "Acceso de inicio antiguo eliminado: $($ShortcutFile.Name)" OK
+            foreach ($Package in $ProvisionedMatches)
+            {
+                try
+                {
+                    Remove-AppxProvisionedPackage `
+                        -Online `
+                        -PackageName $Package.PackageName `
+                        -AllUsers `
+                        -ErrorAction Stop | Out-Null
+
+                    Write-D3PL0YLog (
+                        'Desaprovisionado: {0}' -f $Target
+                    ) 'OK'
+                }
+                catch
+                {
+                    Write-D3PL0YWarning (
+                        'No se pudo desaprovisionar {0}. {1}' -f
+                        $Target,
+                        $_.Exception.Message
+                    )
                 }
             }
-            catch {
-                Write-D3PL0YLog "No se pudo revisar el acceso de inicio $($ShortcutFile.Name): $($_.Exception.Message)" WARN
+
+            if (
+                ($InstalledMatches.Count -eq 0) -and
+                ($ProvisionedMatches.Count -eq 0)
+            )
+            {
+                Write-D3PL0YLog ('No estaba instalado: {0}' -f $Target)
             }
+        }
+    } | Out-Null
+}
+else
+{
+    Write-D3PL0YWarning 'La eliminación de bloatware se ha omitido.'
+}
+
+Invoke-D3PL0YStep -Name 'Configurar privacidad y sugerencias' -Action {
+
+    $ContentDeliveryManager =
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+
+    foreach ($Property in @(
+        'SubscribedContent-338388Enabled',
+        'SubscribedContent-338389Enabled',
+        'SubscribedContent-353694Enabled',
+        'SubscribedContent-353696Enabled',
+        'SystemPaneSuggestionsEnabled',
+        'SilentInstalledAppsEnabled',
+        'SoftLandingEnabled'
+    ))
+    {
+        Set-D3PL0YRegistryValue `
+            -Path $ContentDeliveryManager `
+            -Name $Property `
+            -Value 0 `
+            -Type DWord
+    }
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' `
+        -Name 'TurnOffWindowsCopilot' `
+        -Value 1 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' `
+        -Name 'AllowTelemetry' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' `
+        -Name 'DisableWindowsConsumerFeatures' `
+        -Value 1 `
+        -Type DWord
+} | Out-Null
+
+Invoke-D3PL0YStep -Name 'Instalar aplicaciones' -Action {
+
+    $Apps = @(
+        'Google.Chrome',
+        'Google.GoogleDrive',
+        'Tailscale.Tailscale',
+        'Microsoft.VisualStudioCode',
+        'Audacity.Audacity'
+    )
+
+    $FailedApps = New-Object System.Collections.Generic.List[string]
+
+    foreach ($App in $Apps)
+    {
+        Set-D3PL0YStatus ('INSTALANDO {0}' -f $App)
+
+        try
+        {
+            Install-D3PL0YWingetPackage -Id $App
+        }
+        catch
+        {
+            $FailedApps.Add($App)
+            Write-D3PL0YWarning $_.Exception.Message
         }
     }
 
-    return [pscustomobject]@{
-        Changes = $Removed
-        Detail  = "$Removed automatizaciones antiguas de Google Drive eliminadas. D3PL0Y no crea sustitutas."
+    if ($FailedApps.Count -gt 0)
+    {
+        throw (
+            'No se pudieron instalar estas aplicaciones: {0}' -f
+            ($FailedApps -join ', ')
+        )
     }
-}
+} | Out-Null
 
-function Ensure-LocalKnownFolders {
-    $UserShellValues = [System.Collections.Generic.List[object]]::new()
-    $ShellValues = [System.Collections.Generic.List[object]]::new()
-    $Redirected = 0
+Invoke-D3PL0YStep -Name 'Aplicar tema oscuro y configurar Explorador' -Action {
 
-    $UserShellPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+    $Personalize =
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 
-    foreach ($Folder in $LocalKnownFolders) {
-        $Relative = [string]$Folder.RelativePath
-        $ExpandedTarget = Join-Path $env:USERPROFILE $Relative
-        $ExpandableTarget = '%USERPROFILE%\' + $Relative
+    Set-D3PL0YRegistryValue `
+        -Path $Personalize `
+        -Name 'AppsUseLightTheme' `
+        -Value 0 `
+        -Type DWord
 
-        New-Item -ItemType Directory -Path $ExpandedTarget -Force | Out-Null
+    Set-D3PL0YRegistryValue `
+        -Path $Personalize `
+        -Name 'SystemUsesLightTheme' `
+        -Value 0 `
+        -Type DWord
 
-        try {
-            $Current = Get-ItemPropertyValue -LiteralPath $UserShellPath -Name ([string]$Folder.Name) -ErrorAction Stop
-            $ExpandedCurrent = [Environment]::ExpandEnvironmentVariables([string]$Current).TrimEnd('\')
-            if ($ExpandedCurrent -and $ExpandedCurrent -ne $ExpandedTarget.TrimEnd('\')) {
-                $Redirected++
-                Write-D3PL0YLog "Carpeta personal corregida: $($Folder.Name) apuntaba a '$Current'. Los datos antiguos no se eliminan." WARN
-            }
-        }
-        catch {}
+    Set-D3PL0YRegistryValue `
+        -Path $Personalize `
+        -Name 'ColorPrevalence' `
+        -Value 1 `
+        -Type DWord
 
-        $UserShellValues.Add(@{
-            Name  = [string]$Folder.Name
-            Value = $ExpandableTarget
-            Kind  = 'ExpandString'
-        })
-        $ShellValues.Add(@{
-            Name  = [string]$Folder.Name
-            Value = $ExpandedTarget
-            Kind  = 'String'
-        })
-    }
+    $ExplorerAdvanced =
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
 
-    $Changes = 0
-    $Changes += Set-RegistryBatch -Hive CurrentUser `
-        -Path 'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' `
-        -Values ($UserShellValues.ToArray())
-    $Changes += Set-RegistryBatch -Hive CurrentUser `
-        -Path 'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' `
-        -Values ($ShellValues.ToArray())
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'HideFileExt' `
+        -Value 0 `
+        -Type DWord
 
-    if ($Changes -gt 0) {
-        $Script:ExplorerRefreshNeeded = $true
-    }
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'Hidden' `
+        -Value 1 `
+        -Type DWord
 
-    return [pscustomobject]@{
-        Changes = $Changes
-        Detail  = "$($LocalKnownFolders.Count) carpetas personales verificadas; $Redirected redirecciones externas corregidas. No se movieron ni borraron datos existentes."
-    }
-}
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'TaskbarAl' `
+        -Value 1 `
+        -Type DWord
 
-function Apply-RegistryConfiguration {
-    $Changes = 0
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'TaskbarDa' `
+        -Value 0 `
+        -Type DWord
 
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' -Values @(
-        @{ Name = 'SubscribedContent-338388Enabled'; Value = 0; Kind = 'DWord' }
-        @{ Name = 'SubscribedContent-338389Enabled'; Value = 0; Kind = 'DWord' }
-        @{ Name = 'SubscribedContent-353694Enabled'; Value = 0; Kind = 'DWord' }
-        @{ Name = 'SubscribedContent-353696Enabled'; Value = 0; Kind = 'DWord' }
-        @{ Name = 'SystemPaneSuggestionsEnabled';    Value = 0; Kind = 'DWord' }
-        @{ Name = 'SilentInstalledAppsEnabled';      Value = 0; Kind = 'DWord' }
-        @{ Name = 'SoftLandingEnabled';              Value = 0; Kind = 'DWord' }
-    )
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'ShowTaskViewButton' `
+        -Value 0 `
+        -Type DWord
 
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Policies\Microsoft\Windows\WindowsCopilot' -Values @(
-        @{ Name = 'TurnOffWindowsCopilot'; Value = 1; Kind = 'DWord' }
-    )
+    $Search =
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search'
 
-    $Changes += Set-RegistryBatch -Hive LocalMachine -Path 'SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Values @(
-        @{ Name = 'AllowTelemetry'; Value = 0; Kind = 'DWord' }
-    )
+    Set-D3PL0YRegistryValue `
+        -Path $Search `
+        -Name 'SearchboxTaskbarMode' `
+        -Value 0 `
+        -Type DWord
 
-    $Changes += Set-RegistryBatch -Hive LocalMachine -Path 'SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Values @(
-        @{ Name = 'DisableWindowsConsumerFeatures'; Value = 1; Kind = 'DWord' }
-    )
+    Set-D3PL0YRegistryValue `
+        -Path $Search `
+        -Name 'SearchboxTaskbarModeCache' `
+        -Value 0 `
+        -Type DWord
+} | Out-Null
 
-    $Changes += Set-RegistryBatch -Hive LocalMachine -Path 'SYSTEM\CurrentControlSet\Control\FileSystem' -Values @(
-        @{ Name = 'LongPathsEnabled'; Value = 1; Kind = 'DWord' }
-    )
+Invoke-D3PL0YStep -Name 'Aplicar color de énfasis verde' -Action {
 
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Values @(
-        @{ Name = 'AppsUseLightTheme';    Value = 0; Kind = 'DWord' }
-        @{ Name = 'SystemUsesLightTheme'; Value = 0; Kind = 'DWord' }
-        @{ Name = 'ColorPrevalence';      Value = 1; Kind = 'DWord' }
-    )
+    $Dwm = 'HKCU:\Software\Microsoft\Windows\DWM'
 
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Values @(
-        @{ Name = 'HideFileExt';        Value = 0; Kind = 'DWord' }
-        @{ Name = 'Hidden';             Value = 1; Kind = 'DWord' }
-        @{ Name = 'TaskbarAl';          Value = 1; Kind = 'DWord' }
-        @{ Name = 'TaskbarDa';          Value = 0; Kind = 'DWord' }
-        @{ Name = 'ShowTaskViewButton'; Value = 0; Kind = 'DWord' }
-    )
+    Set-D3PL0YRegistryValue `
+        -Path $Dwm `
+        -Name 'AccentColor' `
+        -Value 0xFF107C10 `
+        -Type DWord
 
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Microsoft\Windows\CurrentVersion\Search' -Values @(
-        @{ Name = 'SearchboxTaskbarMode';      Value = 0; Kind = 'DWord' }
-        @{ Name = 'SearchboxTaskbarModeCache'; Value = 0; Kind = 'DWord' }
-    )
+    Set-D3PL0YRegistryValue `
+        -Path $Dwm `
+        -Name 'ColorizationColor' `
+        -Value 0xC4107C10 `
+        -Type DWord
 
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Microsoft\Windows\DWM' -Values @(
-        @{ Name = 'AccentColor';              Value = $D3PL0Y.AccentColor;       Kind = 'DWord' }
-        @{ Name = 'ColorizationColor';        Value = $D3PL0Y.ColorizationColor; Kind = 'DWord' }
-        @{ Name = 'EnableWindowColorization'; Value = 1;                         Kind = 'DWord' }
-        @{ Name = 'ColorPrevalence';          Value = 1;                         Kind = 'DWord' }
-    )
+    Set-D3PL0YRegistryValue `
+        -Path $Dwm `
+        -Name 'EnableWindowColorization' `
+        -Value 1 `
+        -Type DWord
 
-    $Palette = [byte[]](
+    Set-D3PL0YRegistryValue `
+        -Path $Dwm `
+        -Name 'ColorPrevalence' `
+        -Value 1 `
+        -Type DWord
+
+    $Accent =
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Accent'
+
+    $AccentPalette = [byte[]](
         0x95,0xEF,0x81,0x00,
         0x45,0xE5,0x32,0x00,
         0x19,0xA1,0x15,0x00,
@@ -1250,386 +805,275 @@ function Apply-RegistryConfiguration {
         0x4C,0x4A,0x48,0x00
     )
 
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Microsoft\Windows\CurrentVersion\Explorer\Accent' -Values @(
-        @{ Name = 'AccentPalette';   Value = $Palette;                Kind = 'Binary' }
-        @{ Name = 'AccentColorMenu'; Value = $D3PL0Y.AccentColor;     Kind = 'DWord' }
-        @{ Name = 'StartColorMenu';  Value = $D3PL0Y.StartColorMenu;  Kind = 'DWord' }
-    )
+    Set-D3PL0YRegistryValue `
+        -Path $Accent `
+        -Name 'AccentPalette' `
+        -Value $AccentPalette `
+        -Type Binary
 
-    if ($Changes -gt 0) {
-        $Script:ExplorerRefreshNeeded = $true
+    Set-D3PL0YRegistryValue `
+        -Path $Accent `
+        -Name 'AccentColorMenu' `
+        -Value 0xFF107C10 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $Accent `
+        -Name 'StartColorMenu' `
+        -Value 0xFF0E6D0E `
+        -Type DWord
+} | Out-Null
+
+Invoke-D3PL0YStep -Name 'Aplicar cursores' -Action {
+
+    $CursorMap = [ordered]@{
+        Arrow       = 'arrow_eoa.cur'
+        AppStarting = 'busy_eoa.cur'
+        Crosshair   = 'cross_eoa.cur'
+        SizeWE      = 'ew_eoa.cur'
+        Help        = 'helpsel_eoa.cur'
+        IBeam       = 'ibeam_eoa.cur'
+        Hand        = 'link_eoa.cur'
+        SizeAll     = 'move_eoa.cur'
+        SizeNESW    = 'nesw_eoa.cur'
+        SizeNS      = 'ns_eoa.cur'
+        SizeNWSE    = 'nwse_eoa.cur'
+        NWPen       = 'pen_eoa.cur'
+        Person      = 'person_eoa.cur'
+        Pin         = 'pin_eoa.cur'
+        No          = 'unavail_eoa.cur'
+        UpArrow     = 'up_eoa.cur'
+        Wait        = 'wait_eoa.cur'
     }
 
-    return [pscustomobject]@{
-        Changes = $Changes
-        Detail  = "$Changes valores del Registro modificados; los valores ya correctos no se reescribieron."
-    }
-}
+    foreach ($Entry in $CursorMap.GetEnumerator())
+    {
+        $Destination = Join-Path $CursorFolder $Entry.Value
+        $Uri = '{0}/configs/cursors/{1}' -f $RepositoryRaw, $Entry.Value
 
-function Apply-CursorsAndWallpapers {
-    $Changes = 0
+        Invoke-D3PL0YDownload `
+            -Uri $Uri `
+            -Destination $Destination `
+            -Force:$RefreshAssets
 
-    $CursorValues = [System.Collections.Generic.List[object]]::new()
-    foreach ($Entry in $CursorMap.GetEnumerator()) {
-        $CursorValues.Add(@{
-            Name  = [string]$Entry.Key
-            Value = Join-Path $Paths.Cursors ([string]$Entry.Value)
-            Kind  = 'String'
-        })
-    }
-    $CursorValues.Add(@{ Name = '';               Value = 'D3PL0Y'; Kind = 'String' })
-    $CursorValues.Add(@{ Name = 'CursorBaseSize'; Value = 48;            Kind = 'DWord'  })
-
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Control Panel\Cursors' -Values ($CursorValues.ToArray())
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Control Panel\Mouse' -Values @(
-        @{ Name = 'MouseSensitivity'; Value = $D3PL0Y.MouseSpeed; Kind = 'String' }
-    )
-    $Changes += Set-RegistryBatch -Hive CurrentUser -Path 'Software\Microsoft\Accessibility' -Values @(
-        @{ Name = 'CursorType';  Value = 6;     Kind = 'DWord' }
-        @{ Name = 'CursorColor'; Value = 65280; Kind = 'DWord' }
-        @{ Name = 'CursorSize';  Value = 2;     Kind = 'DWord' }
-    )
-
-    $WallpaperFile = Join-Path $Paths.Wallpapers 'd3pl0y.png'
-    $LockImage = Join-Path $Paths.Wallpapers 'lockscreen.png'
-
-    if (-not (Test-Path -LiteralPath $WallpaperFile)) {
-        throw "No existe el fondo esperado: $WallpaperFile"
-    }
-    if (-not (Test-Path -LiteralPath $LockImage)) {
-        throw "No existe la pantalla de bloqueo esperada: $LockImage"
+        Set-D3PL0YRegistryValue `
+            -Path 'HKCU:\Control Panel\Cursors' `
+            -Name $Entry.Key `
+            -Value $Destination `
+            -Type String
     }
 
-    if (-not ('D3PL0YNativeMethodsV4' -as [type])) {
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Control Panel\Cursors' `
+        -Name '(Default)' `
+        -Value 'D3PL0Y' `
+        -Type String
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Control Panel\Cursors' `
+        -Name 'CursorBaseSize' `
+        -Value 48 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Control Panel\Mouse' `
+        -Name 'MouseSensitivity' `
+        -Value '13' `
+        -Type String
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Microsoft\Accessibility' `
+        -Name 'CursorType' `
+        -Value 6 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Microsoft\Accessibility' `
+        -Name 'CursorColor' `
+        -Value 65280 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Microsoft\Accessibility' `
+        -Name 'CursorSize' `
+        -Value 2 `
+        -Type DWord
+
+    if (-not ('D3PL0YCursorRefresh' -as [type]))
+    {
         Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 
-public static class D3PL0YNativeMethodsV4
+public static class D3PL0YCursorRefresh
 {
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SystemParametersInfo(
         uint uiAction,
         uint uiParam,
-        string pvParam,
+        IntPtr pvParam,
         uint fWinIni
     );
 }
 '@
     }
 
-    $CurrentWallpaper = $null
-    try {
-        $CurrentWallpaper = Get-ItemPropertyValue -LiteralPath 'HKCU:\Control Panel\Desktop' -Name 'WallPaper' -ErrorAction Stop
-    }
-    catch {}
+    [D3PL0YCursorRefresh]::SystemParametersInfo(
+        0x57,
+        0,
+        [IntPtr]::Zero,
+        0x01 -bor 0x02
+    ) | Out-Null
+} | Out-Null
 
-    if ($Force -or $CurrentWallpaper -ne $WallpaperFile) {
-        $Applied = [D3PL0YNativeMethodsV4]::SystemParametersInfo(20, 0, $WallpaperFile, 3)
-        if (-not $Applied) {
-            throw 'Windows no confirmó la aplicación del fondo de escritorio.'
-        }
-        $Changes++
+Invoke-D3PL0YStep -Name 'Aplicar fondo de escritorio' -Action {
+
+    $WallpaperFile = Join-Path $WallpaperFolder 'd3pl0y.png'
+    $WallpaperUri = '{0}/wallpapers/d3pl0y.png' -f $RepositoryRaw
+
+    Invoke-D3PL0YDownload `
+        -Uri $WallpaperUri `
+        -Destination $WallpaperFile `
+        -Force:$RefreshAssets
+
+    if (-not ('D3PL0YWallpaper' -as [type]))
+    {
+        Add-Type @'
+using System.Runtime.InteropServices;
+
+public static class D3PL0YWallpaper
+{
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool SystemParametersInfo(
+        int uAction,
+        int uParam,
+        string lpvParam,
+        int fuWinIni
+    );
+}
+'@
     }
 
-    $Changes += Set-RegistryBatch -Hive LocalMachine -Path 'SOFTWARE\Policies\Microsoft\Windows\Personalization' -Values @(
-        @{ Name = 'LockScreenImage'; Value = $LockImage; Kind = 'String' }
+    $WallpaperApplied = [D3PL0YWallpaper]::SystemParametersInfo(
+        20,
+        0,
+        $WallpaperFile,
+        3
     )
 
-    if ($Changes -gt 0) {
-        $Script:ExplorerRefreshNeeded = $true
+    if (-not $WallpaperApplied)
+    {
+        throw 'Windows no confirmó la aplicación del fondo de escritorio.'
     }
 
-    return [pscustomobject]@{
-        Changes = $Changes
-        Detail  = "$Changes ajustes visuales modificados."
-    }
-}
+    Write-D3PL0YLog 'Fondo de escritorio aplicado.' 'OK'
+} | Out-Null
 
-function Refresh-InteractiveShell {
-    if (-not $Script:ExplorerRefreshNeeded) {
-        return [pscustomobject]@{
-            Changes = 0
-            Detail  = 'No había cambios visuales que recargar.'
-        }
-    }
+Invoke-D3PL0YStep -Name 'Configurar pantalla de bloqueo' -Action {
 
-    & rundll32.exe user32.dll,UpdatePerUserSystemParameters
+    $LockImage = Join-Path $LockFolder 'lockscreen.png'
+    $LockUri = '{0}/wallpapers/lockscreen.png' -f $RepositoryRaw
 
-    $Explorer = Get-Process -Name explorer -ErrorAction SilentlyContinue
-    if ($Explorer) {
-        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 800
-        Start-Process explorer.exe
-    }
+    Invoke-D3PL0YDownload `
+        -Uri $LockUri `
+        -Destination $LockImage `
+        -Force:$RefreshAssets
 
-    return [pscustomobject]@{
-        Changes = 1
-        Detail  = 'Entorno gráfico recargado una sola vez.'
-    }
-}
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' `
+        -Name 'LockScreenImage' `
+        -Value $LockImage `
+        -Type String
+
+    Write-D3PL0YLog (
+        'La pantalla de bloqueo se aplicará al actualizar la sesión o reiniciar.'
+    ) 'OK'
+} | Out-Null
+
+Invoke-D3PL0YStep -Name 'Actualizar entorno gráfico' -Action {
+
+    Restart-D3PL0YExplorer
+    $script:ExplorerNeedsRestart = $false
+} | Out-Null
 
 # =============================================================================
-# EJECUCIÓN
+# RESUMEN FINAL
 # =============================================================================
 
-try {
-    $Script:Mutex = [System.Threading.Mutex]::new($false, 'Global\D3PL0Y')
-    $Script:MutexAcquired = $Script:Mutex.WaitOne(0)
-    if (-not $Script:MutexAcquired) {
-        throw 'Ya hay otra instancia de D3PL0Y ejecutándose.'
-    }
+$FinalStatus = if ($script:ErrorCount -eq 0)
+{
+    'COMPLETADO'
+}
+else
+{
+    'COMPLETADO CON ERRORES'
+}
 
-    Initialize-Log
-    $Script:State = Read-D3PL0YState
-    Set-D3PL0YStatus 'INICIANDO D3PL0Y'
+Set-D3PL0YStatus $FinalStatus
 
-    $Effective = [ordered]@{
-        Project     = $D3PL0Y
-        ManagedApps = $ManagedApps
-        AppsToRemove = $AppsToRemove
-        LocalKnownFolders = $LocalKnownFolders
-        Assets      = $Assets
-        Parameters  = [ordered]@{
-            Force       = [bool]$Force
-            UpdateApps  = [bool]$UpdateApps
-            NoRestart   = [bool]$NoRestart
-            OnlyPhase   = $OnlyPhase
-            SkipPhase   = $SkipPhase
-        }
-    } | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($EffectiveConfig, $Effective, ([System.Text.UTF8Encoding]::new($false)))
-
-    $Banner = @"
-============================================================
-                           D3PL0Y
-                Windows 11 Provisioning v4.0
-============================================================
-"@
-
-    Write-Host $Banner -ForegroundColor Green
-    Write-D3PL0YLog "$($D3PL0Y.Name) v$($D3PL0Y.Version)"
-    Write-D3PL0YLog "Equipo: $env:COMPUTERNAME | Usuario: $env:USERNAME | PowerShell: $($PSVersionTable.PSVersion)"
-
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-    Invoke-D3PL0YPhase -Key 'Preflight' -Name 'Comprobaciones previas' -Revision '4.0.0' `
-        -FingerprintData $null -AlwaysRun -Critical -Action {
-            $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-            $Principal = [Security.Principal.WindowsPrincipal]::new($Identity)
-            if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-                throw 'D3PL0Y debe ejecutarse como administrador.'
-            }
-
-            if (-not [Environment]::Is64BitOperatingSystem) {
-                throw 'Se requiere Windows de 64 bits.'
-            }
-
-            $Os = Get-CimInstance Win32_OperatingSystem
-            if ([version]$Os.Version -lt [version]'10.0.22000') {
-                throw "Se requiere Windows 11. Versión detectada: $($Os.Version)."
-            }
-
-            $SystemDriveName = ([IO.Path]::GetPathRoot($env:SystemRoot)).TrimEnd('\').TrimEnd(':')
-            $SystemDrive = Get-PSDrive -Name $SystemDriveName
-            if ($SystemDrive.Free -lt $D3PL0Y.MinimumFreeSpaceBytes) {
-                throw 'Hay menos de 5 GB libres en la unidad del sistema.'
-            }
-
-            $Script:WingetAvailable = $null -ne (Get-Command winget.exe -ErrorAction SilentlyContinue)
-            if (-not $Script:WingetAvailable) {
-                Write-D3PL0YLog 'WinGet no está disponible. La fase de aplicaciones fallará sin modificar las demás fases.' WARN
-            }
-
-            return [pscustomobject]@{
-                Changes = 0
-                Detail  = "Windows $($Os.Version); $([math]::Round($SystemDrive.Free / 1GB, 1)) GB libres; WinGet=$Script:WingetAvailable."
-            }
-        }
-
-    Invoke-D3PL0YPhase -Key 'LegacyCleanup' -Name 'Eliminar automatizaciones antiguas de Google Drive' -Revision '4.0.0' `
-        -FingerprintData @{ RemoveDriveHelperTasks = $true; RemoveStartupShortcuts = $true } -Action {
-            Remove-ObsoleteDriveAutomation
-        }
-
-    Invoke-D3PL0YPhase -Key 'Power' -Name 'Configurar energía' -Revision '4.0.0' `
-        -FingerprintData @{ Hibernate = $false; AcSleep = 0; DcSleep = 0; AcMonitor = 0; DcMonitor = 0 } -Action {
-            Invoke-NativeCommand powercfg.exe @('-h', 'off') -Quiet | Out-Null
-            Invoke-NativeCommand powercfg.exe @('/change', 'standby-timeout-ac', '0') -Quiet | Out-Null
-            Invoke-NativeCommand powercfg.exe @('/change', 'monitor-timeout-ac', '0') -Quiet | Out-Null
-            Invoke-NativeCommand powercfg.exe @('/change', 'standby-timeout-dc', '0') -Quiet | Out-Null
-            Invoke-NativeCommand powercfg.exe @('/change', 'monitor-timeout-dc', '0') -Quiet | Out-Null
-            return [pscustomobject]@{ Changes = 5; Detail = 'Hibernación y temporizadores de suspensión desactivados.' }
-        }
-
-    Invoke-D3PL0YPhase -Key 'Debloat' -Name 'Eliminar bloatware' -Revision '4.0.0' `
-        -FingerprintData $AppsToRemove -Action {
-            Remove-SelectedAppxPackages
-        }
-
-    Invoke-D3PL0YPhase -Key 'Registry' -Name 'Aplicar configuración de Windows' -Revision '4.0.0' `
-        -FingerprintData @{
-            AccentColor = $D3PL0Y.AccentColor
-            MouseSpeed  = $D3PL0Y.MouseSpeed
-            LongPaths   = $true
-        } -AlwaysRun -Action {
-            Apply-RegistryConfiguration
-        }
-
-    Invoke-D3PL0YPhase -Key 'KnownFolders' -Name 'Mantener carpetas personales en almacenamiento local' -Revision '4.0.0' `
-        -FingerprintData $LocalKnownFolders -AlwaysRun -Action {
-            Ensure-LocalKnownFolders
-        }
-
-    Invoke-D3PL0YPhase -Key 'Apps' -Name 'Verificar e instalar aplicaciones' -Revision '4.1.3' `
-        -FingerprintData @{ Apps = $ManagedApps; UpdateApps = [bool]$UpdateApps } -AlwaysRun -Action {
-            if (-not $Script:WingetAvailable) {
-                throw 'WinGet no está disponible. Instala o repara App Installer y vuelve a ejecutar la fase Apps.'
-            }
-            Install-ManagedApplications
-        }
-
-    $AssetsRevision = '4.0.0'
-    Invoke-D3PL0YPhase -Key 'Assets' -Name 'Sincronizar recursos visuales' -Revision $AssetsRevision `
-        -FingerprintData $Assets -ComplianceTest {
-            foreach ($Asset in $Assets) {
-                if (-not (Test-Path -LiteralPath $Asset.Destination)) { return $false }
-                if ((Get-Item -LiteralPath $Asset.Destination).Length -le 0) { return $false }
-            }
-            return $true
-        } -Action {
-            $CurrentAssetsFingerprint = Get-ObjectFingerprint -Revision $AssetsRevision -Data $Assets
-            $RefreshExistingAssets = $Force -or -not $Script:State.Phases.ContainsKey('Assets') -or
-                $Script:State.Phases['Assets'].Fingerprint -ne $CurrentAssetsFingerprint
-
-            $AssetChanges = Sync-AssetBatch -AssetList ($Assets.ToArray()) -RefreshExisting:$RefreshExistingAssets
-            return [pscustomobject]@{
-                Changes = $AssetChanges
-                Detail  = "$($Assets.Count) recursos verificados; $AssetChanges actualizados."
-            }
-        }
-
-    Invoke-D3PL0YPhase -Key 'Visuals' -Name 'Aplicar cursores y fondos' -Revision '4.0.0' `
-        -FingerprintData @{
-            Cursors = $CursorMap
-            Wallpaper = 'd3pl0y.png'
-            LockScreen = 'lockscreen.png'
-        } -AlwaysRun -Action {
-            Apply-CursorsAndWallpapers
-        }
-    Invoke-D3PL0YPhase -Key 'Shell' -Name 'Actualizar entorno gráfico' -Revision '4.0.0' `
-        -FingerprintData @{ RefreshOnlyWhenChanged = $true } -AlwaysRun -Action {
-            Refresh-InteractiveShell
-        }
-
-    Invoke-D3PL0YPhase -Key 'Cleanup' -Name 'Limpiar archivos temporales' -Revision '4.0.0' `
-        -FingerprintData @{ LogRetention = $D3PL0Y.LogRetention } -AlwaysRun -Action {
-            Remove-Item -Path "$($Paths.Cache)\*.download" -Force -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $WingetImportFile -Force -ErrorAction SilentlyContinue
-            Remove-OldLogs
-            return [pscustomobject]@{ Changes = 0; Detail = 'Caché temporal y logs antiguos revisados.' }
-        }
-
-    $ErrorCount = @($Script:Results | Where-Object Status -eq 'ERROR').Count
-    $SkippedCount = @($Script:Results | Where-Object Status -eq 'SKIP').Count
-    $FinalStatus = if ($ErrorCount -eq 0) { 'COMPLETADO' } else { 'COMPLETADO CON ERRORES' }
-    $Elapsed = (Get-Date) - $Script:StartedAt
-
-    $Summary = [ordered]@{
-        Project        = $D3PL0Y.Name
-        Version        = $D3PL0Y.Version
-        Status         = $FinalStatus
-        Computer       = $env:COMPUTERNAME
-        User           = $env:USERNAME
-        StartedAt      = $Script:StartedAt.ToString('s')
-        FinishedAt     = (Get-Date).ToString('s')
-        DurationSeconds = [math]::Round($Elapsed.TotalSeconds, 2)
-        Changes        = $Script:Changes
-        ErrorCount     = $ErrorCount
-        WarningCount   = $Script:Warnings
-        SkippedCount   = $SkippedCount
-        LogFile        = $LogFile
-        StateFile      = $StateFile
-        Results        = $Script:Results
-    }
-
-    $SummaryJson = $Summary | ConvertTo-Json -Depth 8
-    [System.IO.File]::WriteAllText($SummaryFile, $SummaryJson, ([System.Text.UTF8Encoding]::new($false)))
-
-    $ReadableSummary = @"
+$Summary = @"
 =================================
-$($D3PL0Y.Name)
+D3PL0Y
 =================================
 
-Versión: $($D3PL0Y.Version)
+Versión: $Version
 Fecha: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
 Estado: $FinalStatus
 Equipo: $env:COMPUTERNAME
 Usuario: $env:USERNAME
-Duración: $([math]::Round($Elapsed.TotalSeconds, 1)) segundos
-Cambios realizados: $($Script:Changes)
-Fases omitidas: $SkippedCount
-Errores: $ErrorCount
-Avisos: $($Script:Warnings)
-Log: $LogFile
-Estado reanudable: $StateFile
-Resumen JSON: $SummaryFile
+
+Fases completadas: $script:SuccessCount
+Avisos: $script:WarningCount
+Errores: $script:ErrorCount
+
+Log:
+$LogFile
+
+Notas:
+- Se instalan Chrome, Google Drive, Tailscale, Visual Studio Code y Audacity.
+- D3PL0Y no redirige las carpetas personales.
+- D3PL0Y no crea un segundo script de Google Drive.
 "@
-    [System.IO.File]::WriteAllText($LatestSummaryFile, $ReadableSummary, ([System.Text.UTF8Encoding]::new($false)))
 
-    Set-D3PL0YStatus $FinalStatus
-    $FinalLogLevel = if ($ErrorCount) { 'WARN' } else { 'OK' }
-    Write-D3PL0YLog "D3PL0Y finalizado: $FinalStatus en $([math]::Round($Elapsed.TotalSeconds, 1)) segundos." $FinalLogLevel
+Set-Content `
+    -LiteralPath $SummaryFile `
+    -Value $Summary `
+    -Encoding UTF8
 
-    $PendingReboot = Test-PendingReboot
-    $ShouldRestart = -not $NoRestart -and $ErrorCount -eq 0 -and ($Script:RestartRecommended -or $PendingReboot)
+Write-Host ''
+Write-Host $Summary -ForegroundColor Green
 
-    if ($ShouldRestart) {
-        Write-D3PL0YLog 'Hay cambios que recomiendan reiniciar. Reinicio programado en 60 segundos; usa shutdown /a para cancelarlo.' WARN
-        shutdown.exe /r /t 60 /c "D3PL0Y v$($D3PL0Y.Version) completado"
+if ($script:TranscriptStarted)
+{
+    try
+    {
+        Stop-Transcript | Out-Null
     }
-    elseif ($NoRestart) {
-        Write-D3PL0YLog 'Reinicio automático omitido mediante -NoRestart.' SKIP
-    }
-    else {
-        Write-D3PL0YLog 'No se necesita reiniciar el equipo.' SKIP
+    catch
+    {
     }
 }
-catch {
-    try {
-        Set-D3PL0YStatus 'ERROR CRÍTICO'
-        Write-D3PL0YLog "ERROR CRÍTICO: $($_.Exception.Message)" ERROR
 
-        $Failure = [ordered]@{
-            Project    = $D3PL0Y.Name
-            Version    = $D3PL0Y.Version
-            Status     = 'ERROR CRÍTICO'
-            Computer   = $env:COMPUTERNAME
-            User       = $env:USERNAME
-            FinishedAt = (Get-Date).ToString('s')
-            Error      = $_.Exception.ToString()
-            Results    = $Script:Results
-        } | ConvertTo-Json -Depth 8
+if (($script:ErrorCount -eq 0) -and (-not $NoRestart))
+{
+    Write-Host ''
+    Write-Host (
+        'El equipo se reiniciará en 30 segundos. ' +
+        'Ejecuta shutdown /a para cancelarlo.'
+    ) -ForegroundColor Yellow
 
-        [System.IO.File]::WriteAllText($SummaryFile, $Failure, ([System.Text.UTF8Encoding]::new($false)))
-    }
-    catch {}
-
-    exit 1
+    & shutdown.exe `
+        /r `
+        /t 30 `
+        /c ('D3PL0Y v{0} completado' -f $Version)
 }
-finally {
-    if ($null -ne $Script:LogWriter) {
-        Flush-D3PL0YLog
-        $Script:LogWriter.Dispose()
-    }
-
-    if ($null -ne $Script:Mutex) {
-        if ($Script:MutexAcquired) {
-            try {
-                $Script:Mutex.ReleaseMutex()
-            }
-            catch {}
-        }
-        $Script:Mutex.Dispose()
-    }
+elseif ($NoRestart)
+{
+    Write-Host 'Reinicio automático omitido mediante -NoRestart.' -ForegroundColor Yellow
+}
+else
+{
+    Write-Host (
+        'No se reiniciará automáticamente porque D3PL0Y terminó con errores.'
+    ) -ForegroundColor Yellow
 }
