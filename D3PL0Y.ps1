@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v1.7
+    D3PL0Y v1.8
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -50,7 +50,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '1.7'
+$Version = '1.8'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -179,7 +179,7 @@ function Set-D3PL0YRegistryValue
 
     if (-not (Test-Path -LiteralPath $Path))
     {
-        New-Item -Path $Path -Force | Out-Null
+        New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
     }
 
     $CurrentValue = $null
@@ -209,6 +209,13 @@ function Set-D3PL0YRegistryValue
             $ExpectedBase64 = [Convert]::ToBase64String([byte[]]$Value)
             $ValuesMatch = ($CurrentBase64 -eq $ExpectedBase64)
         }
+        elseif (($CurrentValue -is [array]) -and ($Value -is [array]))
+        {
+            $ValuesMatch = (
+                (($CurrentValue | ForEach-Object { [string]$_ }) -join "`0") -eq
+                (($Value | ForEach-Object { [string]$_ }) -join "`0")
+            )
+        }
         else
         {
             $ValuesMatch = ([string]$CurrentValue -eq [string]$Value)
@@ -217,12 +224,29 @@ function Set-D3PL0YRegistryValue
 
     if (-not $ValuesMatch)
     {
-        New-ItemProperty `
-            -LiteralPath $Path `
-            -Name $Name `
-            -PropertyType $Type `
-            -Value $Value `
-            -Force | Out-Null
+        try
+        {
+            # Set-ItemProperty crea el valor si no existe y lo actualiza si ya existe.
+            # Evita el fallo que puede provocar New-ItemProperty al sobrescribir
+            # determinados valores existentes del Registro en Windows 11.
+            Set-ItemProperty `
+                -LiteralPath $Path `
+                -Name $Name `
+                -Value $Value `
+                -Type $Type `
+                -Force `
+                -ErrorAction Stop
+        }
+        catch
+        {
+            throw (
+                "No se pudo escribir '{0}' en '{1}' como {2}. {3}" -f
+                $Name,
+                $Path,
+                $Type,
+                $_.Exception.Message
+            )
+        }
 
         $script:ExplorerNeedsRestart = $true
     }
@@ -752,12 +776,6 @@ Invoke-D3PL0YStep -Name 'Aplicar tema oscuro y configurar Explorador' -Action {
     Set-D3PL0YRegistryValue `
         -Path $Search `
         -Name 'SearchboxTaskbarMode' `
-        -Value 0 `
-        -Type DWord
-
-    Set-D3PL0YRegistryValue `
-        -Path $Search `
-        -Name 'SearchboxTaskbarModeCache' `
         -Value 0 `
         -Type DWord
 } | Out-Null
