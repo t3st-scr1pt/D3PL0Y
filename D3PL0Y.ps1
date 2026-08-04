@@ -3,24 +3,41 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v1.9
+    D3PL0Y v2.0
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
 
-    D3PL0Y:
-    - Configura las opciones de energía.
-    - Elimina aplicaciones preinstaladas seleccionadas.
-    - Reduce publicidad, sugerencias y telemetría.
-    - Instala Google Chrome, Google Drive, Tailscale y Audacity.
-    - Aplica el tema oscuro, el color verde y los ajustes del Explorador.
-    - Descarga y aplica cursores, fondo de escritorio y pantalla de bloqueo.
-    - No modifica las rutas de Escritorio, Documentos, Descargas ni otras
+    D3PL0Y permite elegir entre dos perfiles:
+
+    T3ST-SCR1PT:
+    - Configuración general del equipo.
+    - Instala Google Chrome, Google Drive y Tailscale.
+    - Aplica los fondos específicos de T3ST-SCR1PT.
+
+    STUD10-SCR1PT:
+    - Configuración orientada a edición de imagen, vídeo y música.
+    - Instala Google Chrome, Google Drive, Tailscale, Audacity y GIMP.
+    - Aplica los fondos específicos de STUD10-SCR1PT.
+
+    Ambos perfiles:
+    - Configuran las opciones de energía.
+    - Eliminan aplicaciones preinstaladas seleccionadas.
+    - Reducen publicidad, sugerencias y telemetría.
+    - Aplican el tema oscuro, el color verde y los ajustes del Explorador.
+    - Descargan y aplican cursores, fondo de escritorio y pantalla de bloqueo.
+    - No modifican las rutas de Escritorio, Documentos, Descargas ni otras
       carpetas personales.
-    - No crea scripts secundarios ni integraciones posteriores con Google Drive.
+    - No crean scripts secundarios ni integraciones posteriores con Google Drive.
+
+.PARAMETER D3PL0YProfile
+    Selecciona directamente el perfil T3ST-SCR1PT o STUD10-SCR1PT.
+    Si no se indica, D3PL0Y mostrará un menú interactivo.
 
 .PARAMETER NoRestart
     Evita que el equipo se reinicie automáticamente al finalizar.
+    Sin este parámetro, el equipo se reiniciará aunque alguna fase termine
+    con errores.
 
 .PARAMETER SkipDebloat
     Omite la eliminación de aplicaciones preinstaladas.
@@ -32,11 +49,17 @@
     irm https://lavueltitaironica.com/install | iex
 
 .EXAMPLE
+    .\D3PL0Y.ps1 -D3PL0YProfile STUD10-SCR1PT
+
+.EXAMPLE
     .\D3PL0Y.ps1 -NoRestart
 #>
 
 [CmdletBinding()]
 param(
+    [ValidateSet('T3ST-SCR1PT', 'STUD10-SCR1PT')]
+    [string]$D3PL0YProfile,
+
     [switch]$NoRestart,
     [switch]$SkipDebloat,
     [switch]$RefreshAssets
@@ -50,7 +73,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '1.9'
+$Version = '2.0'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -60,6 +83,47 @@ $CursorFolder = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Cursors'
 $LockFolder = Join-Path $env:ProgramData 'D3PL0Y'
 
 $RepositoryRaw = 'https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main'
+
+$D3PL0YProfiles = [ordered]@{
+    'T3ST-SCR1PT' = [pscustomobject]@{
+        DisplayName = 'T3ST-SCR1PT'
+        Description = 'D3PL0Y general para equipos de uso diario y administración.'
+        Apps = @(
+            'Google.Chrome',
+            'Google.GoogleDrive',
+            'Tailscale.Tailscale'
+        )
+        AppNames = @(
+            'Google Chrome',
+            'Google Drive',
+            'Tailscale'
+        )
+        Wallpaper = 't3st-scr1pt.png'
+        Lockscreen = 't3st-scr1pt_lockscreen.png'
+    }
+
+    'STUD10-SCR1PT' = [pscustomobject]@{
+        DisplayName = 'STUD10-SCR1PT'
+        Description = 'D3PL0Y para edición de imagen, vídeo y música.'
+        Apps = @(
+            'Google.Chrome',
+            'Google.GoogleDrive',
+            'Tailscale.Tailscale',
+            'Audacity.Audacity',
+            'GIMP.GIMP.3'
+        )
+        AppNames = @(
+            'Google Chrome',
+            'Google Drive',
+            'Tailscale',
+            'Audacity',
+            'GIMP'
+        )
+        Wallpaper = 'stud10-scr1pt.png'
+        Lockscreen = 'stud10-scr1pt_lockscreen.png'
+    }
+}
+
 
 $StatusFile = Join-Path $LogFolder 'estado.txt'
 $SummaryFile = Join-Path $LogFolder 'Resumen.txt'
@@ -391,6 +455,66 @@ function Install-D3PL0YWingetPackage
     Write-D3PL0YLog ('Instalado: {0}' -f $Id) 'OK'
 }
 
+function Select-D3PL0YProfile
+{
+    param(
+        [string]$RequestedProfile
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedProfile))
+    {
+        $NormalizedProfile = $RequestedProfile.Trim().ToUpperInvariant()
+
+        if ($D3PL0YProfiles.Keys -contains $NormalizedProfile)
+        {
+            return $NormalizedProfile
+        }
+
+        throw (
+            'Perfil D3PL0Y no válido: {0}. Opciones válidas: {1}' -f
+            $RequestedProfile,
+            ($D3PL0YProfiles.Keys -join ', ')
+        )
+    }
+
+    while ($true)
+    {
+        Write-Host ''
+        Write-Host '╔════════════════════════════════════════════════════╗' -ForegroundColor DarkGreen
+        Write-Host '║              SELECCIONA EL D3PL0Y                  ║' -ForegroundColor Green
+        Write-Host '╠════════════════════════════════════════════════════╣' -ForegroundColor DarkGreen
+        Write-Host '║ [1] T3ST-SCR1PT                                    ║' -ForegroundColor Green
+        Write-Host '║     Equipo general: Chrome, Drive y Tailscale      ║' -ForegroundColor Gray
+        Write-Host '║                                                    ║' -ForegroundColor DarkGreen
+        Write-Host '║ [2] STUD10-SCR1PT                                  ║' -ForegroundColor Magenta
+        Write-Host '║     Edición: añade Audacity y GIMP                 ║' -ForegroundColor Gray
+        Write-Host '║                                                    ║' -ForegroundColor DarkGreen
+        Write-Host '║ [0] Cancelar                                       ║' -ForegroundColor Yellow
+        Write-Host '╚════════════════════════════════════════════════════╝' -ForegroundColor DarkGreen
+
+        $Choice = Read-Host 'Selecciona una opción'
+        $NormalizedChoice = $Choice.Trim().ToUpperInvariant()
+
+        if ($NormalizedChoice -in @('1', 'T3ST', 'T3ST-SCR1PT'))
+        {
+            return 'T3ST-SCR1PT'
+        }
+
+        if ($NormalizedChoice -in @('2', 'STUD10', 'STUD10-SCR1PT'))
+        {
+            return 'STUD10-SCR1PT'
+        }
+
+        if ($NormalizedChoice -in @('0', 'Q', 'S', 'SALIR', 'CANCELAR'))
+        {
+            throw 'D3PL0Y cancelado por el usuario.'
+        }
+
+        Write-Host ''
+        Write-Host 'Selección no válida. Usa 1, 2 o 0.' -ForegroundColor Red
+    }
+}
+
 function Restart-D3PL0YExplorer
 {
     Write-D3PL0YLog 'Actualizando la configuración visual de Windows.'
@@ -433,8 +557,6 @@ catch
     Write-Host 'No se pudo iniciar la transcripción completa.' -ForegroundColor Yellow
 }
 
-Set-D3PL0YStatus 'INICIANDO D3PL0Y'
-
 $Banner = @"
 
 ██████╗ ██████╗ ██████╗ ██╗      ██████╗ ██╗   ██╗
@@ -457,6 +579,14 @@ $Banner = @"
 
 Write-Host $Banner -ForegroundColor Green
 
+$SelectedD3PL0Y = Select-D3PL0YProfile -RequestedProfile $D3PL0YProfile
+$SelectedConfig = $D3PL0YProfiles[$SelectedD3PL0Y]
+$InstalledAppSummary = $SelectedConfig.AppNames -join ', '
+
+Set-D3PL0YStatus ('INICIANDO {0}' -f $SelectedD3PL0Y)
+Write-D3PL0YLog ('Perfil seleccionado: {0}' -f $SelectedD3PL0Y) 'OK'
+Write-D3PL0YLog $SelectedConfig.Description
+
 $Date = Get-Date -Format 'dd/MM/yyyy HH:mm:ss'
 $Computer = $env:COMPUTERNAME
 $User = $env:USERNAME
@@ -468,6 +598,7 @@ Write-Host ('│ HOSTNAME : {0,-38}│' -f $Computer) -ForegroundColor Green
 Write-Host ('│ USER     : {0,-38}│' -f $User) -ForegroundColor Green
 Write-Host ('│ DATE     : {0,-38}│' -f $Date) -ForegroundColor Green
 Write-Host ('│ VERSION  : {0,-38}│' -f ('v{0}' -f $Version)) -ForegroundColor Green
+Write-Host ('│ PROFILE  : {0,-38}│' -f $SelectedD3PL0Y) -ForegroundColor Magenta
 Write-Host ('│ STATUS   : {0,-38}│' -f 'INITIALIZING') -ForegroundColor Yellow
 Write-Host '└────────────────────────────────────────────────────┘' -ForegroundColor DarkGreen
 
@@ -748,13 +879,7 @@ Invoke-D3PL0YStep -Name 'Configurar privacidad y sugerencias' -Action {
 
 Invoke-D3PL0YStep -Name 'Instalar aplicaciones' -Action {
 
-    $Apps = @(
-        'Google.Chrome',
-        'Google.GoogleDrive',
-        'Tailscale.Tailscale',
-        'Audacity.Audacity'
-    )
-
+    $Apps = @($SelectedConfig.Apps)
     $FailedApps = New-Object System.Collections.Generic.List[string]
 
     foreach ($App in $Apps)
@@ -1012,8 +1137,11 @@ public static class D3PL0YCursorRefresh
 
 Invoke-D3PL0YStep -Name 'Aplicar fondo de escritorio' -Action {
 
-    $WallpaperFile = Join-Path $WallpaperFolder 'd3pl0y.png'
-    $WallpaperUri = '{0}/wallpapers/d3pl0y.png' -f $RepositoryRaw
+    $WallpaperFile = Join-Path $WallpaperFolder $SelectedConfig.Wallpaper
+    $WallpaperUri = '{0}/wallpapers/{1}' -f (
+        $RepositoryRaw,
+        $SelectedConfig.Wallpaper
+    )
 
     Invoke-D3PL0YDownload `
         -Uri $WallpaperUri `
@@ -1050,13 +1178,20 @@ public static class D3PL0YWallpaper
         throw 'Windows no confirmó la aplicación del fondo de escritorio.'
     }
 
-    Write-D3PL0YLog 'Fondo de escritorio aplicado.' 'OK'
+    Write-D3PL0YLog (
+        'Fondo de escritorio aplicado para {0}: {1}' -f
+        $SelectedD3PL0Y,
+        $SelectedConfig.Wallpaper
+    ) 'OK'
 } | Out-Null
 
 Invoke-D3PL0YStep -Name 'Configurar pantalla de bloqueo' -Action {
 
-    $LockImage = Join-Path $LockFolder 'lockscreen.png'
-    $LockUri = '{0}/wallpapers/lockscreen.png' -f $RepositoryRaw
+    $LockImage = Join-Path $LockFolder $SelectedConfig.Lockscreen
+    $LockUri = '{0}/wallpapers/{1}' -f (
+        $RepositoryRaw,
+        $SelectedConfig.Lockscreen
+    )
 
     Invoke-D3PL0YDownload `
         -Uri $LockUri `
@@ -1101,6 +1236,7 @@ D3PL0Y
 =================================
 
 Versión: $Version
+Perfil: $SelectedD3PL0Y
 Fecha: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
 Estado: $FinalStatus
 Equipo: $env:COMPUTERNAME
@@ -1114,7 +1250,9 @@ Log:
 $LogFile
 
 Notas:
-- Se instalan Chrome, Google Drive, Tailscale y Audacity.
+- Aplicaciones del perfil: $InstalledAppSummary.
+- Fondo de escritorio: $($SelectedConfig.Wallpaper).
+- Pantalla de bloqueo: $($SelectedConfig.Lockscreen).
 - D3PL0Y no redirige las carpetas personales.
 - D3PL0Y no crea un segundo script de Google Drive.
 "@
@@ -1138,7 +1276,7 @@ if ($script:TranscriptStarted)
     }
 }
 
-if (($script:ErrorCount -eq 0) -and (-not $NoRestart))
+if (-not $NoRestart)
 {
     Write-Host ''
     Write-Host (
@@ -1146,18 +1284,18 @@ if (($script:ErrorCount -eq 0) -and (-not $NoRestart))
         'Ejecuta shutdown /a para cancelarlo.'
     ) -ForegroundColor Yellow
 
+    $RestartComment = 'D3PL0Y v{0} - {1} - {2}' -f (
+        $Version,
+        $SelectedD3PL0Y,
+        $FinalStatus
+    )
+
     & shutdown.exe `
         /r `
         /t 30 `
-        /c ('D3PL0Y v{0} completado' -f $Version)
-}
-elseif ($NoRestart)
-{
-    Write-Host 'Reinicio automático omitido mediante -NoRestart.' -ForegroundColor Yellow
+        /c $RestartComment
 }
 else
 {
-    Write-Host (
-        'No se reiniciará automáticamente porque D3PL0Y terminó con errores.'
-    ) -ForegroundColor Yellow
+    Write-Host 'Reinicio automático omitido mediante -NoRestart.' -ForegroundColor Yellow
 }
