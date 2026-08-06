@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v2.0
+    D3PL0Y v2.0.1
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -57,7 +57,9 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('T3ST-SCR1PT', 'STUD10-SCR1PT')]
+    # No se usa ValidateSet aquí: Windows PowerShell 5.1 intenta validar el
+    # valor nulo implícito al ejecutar el script mediante Invoke-Expression.
+    # Select-D3PL0YProfile realiza la validación manual de forma compatible.
     [string]$D3PL0YProfile,
 
     [switch]$NoRestart,
@@ -73,7 +75,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '2.0'
+$Version = '2.0.1'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
