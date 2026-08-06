@@ -26,9 +26,6 @@
     - Reducen publicidad, sugerencias y telemetría.
     - Aplican el tema oscuro, el color verde y los ajustes del Explorador.
     - Descargan y aplican cursores, fondo de escritorio y pantalla de bloqueo.
-    - No modifican las rutas de Escritorio, Documentos, Descargas ni otras
-      carpetas personales.
-    - No crean scripts secundarios ni integraciones posteriores con Google Drive.
 
 .PARAMETER D3PL0YProfile
     Selecciona directamente el perfil T3ST-SCR1PT o STUD10-SCR1PT.
@@ -509,7 +506,7 @@ function Select-D3PL0YProfile
 
         if ($NormalizedChoice -in @('0', 'Q', 'S', 'SALIR', 'CANCELAR'))
         {
-            throw 'D3PL0Y cancelado por el usuario.'
+            return $null
         }
 
         Write-Host ''
@@ -573,8 +570,6 @@ $Banner = @"
 ║                                                    ║
 ║   Instalación automática de aplicaciones           ║
 ║   Configuración personalizada de Windows 11         ║
-║   Sin redirección de carpetas a Google Drive        ║
-║   Preparado para CEREBRO                            ║
 ╚════════════════════════════════════════════════════╝
 
 "@
@@ -582,6 +577,27 @@ $Banner = @"
 Write-Host $Banner -ForegroundColor Green
 
 $SelectedD3PL0Y = Select-D3PL0YProfile -RequestedProfile $D3PL0YProfile
+
+if ([string]::IsNullOrWhiteSpace($SelectedD3PL0Y))
+{
+    Set-D3PL0YStatus 'CANCELADO'
+    Write-D3PL0YLog 'D3PL0Y cancelado por el usuario.'
+
+    if ($script:TranscriptStarted)
+    {
+        try
+        {
+            Stop-Transcript | Out-Null
+            $script:TranscriptStarted = $false
+        }
+        catch
+        {
+        }
+    }
+
+    return
+}
+
 $SelectedConfig = $D3PL0YProfiles[$SelectedD3PL0Y]
 $InstalledAppSummary = $SelectedConfig.AppNames -join ', '
 
@@ -1255,8 +1271,6 @@ Notas:
 - Aplicaciones del perfil: $InstalledAppSummary.
 - Fondo de escritorio: $($SelectedConfig.Wallpaper).
 - Pantalla de bloqueo: $($SelectedConfig.Lockscreen).
-- D3PL0Y no redirige las carpetas personales.
-- D3PL0Y no crea un segundo script de Google Drive.
 "@
 
 Set-Content `
