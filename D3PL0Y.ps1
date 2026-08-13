@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v2.0.1
+    D3PL0Y v2.1.0
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -22,9 +22,10 @@
 
     Ambos perfiles:
     - Configuran las opciones de energía.
-    - Eliminan aplicaciones preinstaladas seleccionadas.
+    - Desinstalan OneDrive y eliminan To Do, Xbox/Xbox Live y bloatware.
     - Reducen publicidad, sugerencias y telemetría.
-    - Aplican el tema oscuro, el color verde y los ajustes del Explorador.
+    - Desactivan Widgets, Game DVR, búsquedas web y experiencias promocionales.
+    - Aplican ajustes seguros de productividad y privacidad en Windows 11.
     - Descargan y aplican cursores, fondo de escritorio y pantalla de bloqueo.
 
 .PARAMETER D3PL0YProfile
@@ -37,10 +38,11 @@
     con errores.
 
 .PARAMETER SkipDebloat
-    Omite la eliminación de aplicaciones preinstaladas.
+    Omite la desinstalación de OneDrive y de aplicaciones preinstaladas.
 
 .PARAMETER RefreshAssets
-    Fuerza la descarga de cursores y fondos aunque ya existan localmente.
+    Fuerza la descarga de cursores aunque ya existan localmente.
+    Los fondos se actualizan siempre para asegurar la versión del repositorio.
 
 .EXAMPLE
     irm https://lavueltitaironica.com/install | iex
@@ -72,7 +74,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '2.0.1'
+$Version = '2.1.0'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -396,6 +398,90 @@ function Invoke-D3PL0YDownload
     }
 }
 
+function Assert-D3PL0YPngFile
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf))
+    {
+        throw ('No existe la imagen descargada: {0}' -f $Path)
+    }
+
+    $ExpectedSignature = [byte[]](
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+    )
+
+    $Stream = [System.IO.File]::OpenRead($Path)
+
+    try
+    {
+        if ($Stream.Length -lt $ExpectedSignature.Length)
+        {
+            throw ('La imagen PNG está vacía o incompleta: {0}' -f $Path)
+        }
+
+        foreach ($ExpectedByte in $ExpectedSignature)
+        {
+            if ($Stream.ReadByte() -ne $ExpectedByte)
+            {
+                throw ('El archivo descargado no es un PNG válido: {0}' -f $Path)
+            }
+        }
+    }
+    finally
+    {
+        $Stream.Dispose()
+    }
+}
+
+function Set-D3PL0YCurrentUserLockScreen
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+    $StorageFileType = [Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime]
+
+    $AsyncOperationMethod = @(
+        [System.WindowsRuntimeSystemExtensions].GetMethods() |
+        Where-Object {
+            ($_.Name -eq 'AsTask') -and
+            ($_.GetParameters().Count -eq 1) -and
+            ($_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1')
+        }
+    )[0]
+
+    $AsyncActionMethod = @(
+        [System.WindowsRuntimeSystemExtensions].GetMethods() |
+        Where-Object {
+            ($_.Name -eq 'AsTask') -and
+            ($_.GetParameters().Count -eq 1) -and
+            ($_.GetParameters()[0].ParameterType.Name -eq 'IAsyncAction')
+        }
+    )[0]
+
+    if (($null -eq $AsyncOperationMethod) -or ($null -eq $AsyncActionMethod))
+    {
+        throw 'No se encontraron los adaptadores asíncronos de Windows Runtime.'
+    }
+
+    $GetFileOperation = [Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime]::GetFileFromPathAsync($Path)
+    $GetFileTaskMethod = $AsyncOperationMethod.MakeGenericMethod($StorageFileType)
+    $GetFileTask = $GetFileTaskMethod.Invoke($null, @($GetFileOperation))
+    $GetFileTask.Wait()
+    $StorageFile = $GetFileTask.Result
+
+    $SetImageAction = [Windows.System.UserProfile.LockScreen,Windows.System.UserProfile,ContentType=WindowsRuntime]::SetImageFileAsync($StorageFile)
+    $SetImageTask = $AsyncActionMethod.Invoke($null, @($SetImageAction))
+    $SetImageTask.Wait()
+}
+
 function Test-D3PL0YWingetPackage
 {
     param(
@@ -452,6 +538,240 @@ function Install-D3PL0YWingetPackage
     }
 
     Write-D3PL0YLog ('Instalado: {0}' -f $Id) 'OK'
+}
+
+function Remove-D3PL0YAppxPackage
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $FoundPackage = $false
+
+    # Se elimina primero el aprovisionamiento para impedir que Windows vuelva
+    # a instalar la aplicación al crear usuarios nuevos.
+    $ProvisionedMatches = @(
+        Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -eq $Name }
+    )
+
+    foreach ($Package in $ProvisionedMatches)
+    {
+        $FoundPackage = $true
+
+        try
+        {
+            Remove-AppxProvisionedPackage `
+                -Online `
+                -PackageName $Package.PackageName `
+                -ErrorAction Stop | Out-Null
+
+            Write-D3PL0YLog ('Desaprovisionado: {0}' -f $Name) 'OK'
+        }
+        catch
+        {
+            $StillProvisioned = @(
+                Get-AppxProvisionedPackage `
+                    -Online `
+                    -ErrorAction SilentlyContinue |
+                Where-Object { $_.PackageName -eq $Package.PackageName }
+            )
+
+            if ($StillProvisioned.Count -eq 0)
+            {
+                Write-D3PL0YLog ('Ya no estaba aprovisionado: {0}' -f $Name) 'OK'
+            }
+            else
+            {
+                Write-D3PL0YWarning (
+                    'No se pudo desaprovisionar {0}. {1}' -f
+                    $Name,
+                    $_.Exception.Message
+                )
+            }
+        }
+    }
+
+    # Después se elimina de todos los perfiles existentes.
+    $InstalledMatches = @(
+        Get-AppxPackage `
+            -AllUsers `
+            -Name $Name `
+            -ErrorAction SilentlyContinue
+    )
+
+    foreach ($Package in $InstalledMatches)
+    {
+        $FoundPackage = $true
+
+        try
+        {
+            Remove-AppxPackage `
+                -Package $Package.PackageFullName `
+                -AllUsers `
+                -ErrorAction Stop
+
+            Write-D3PL0YLog ('Eliminado: {0}' -f $Name) 'OK'
+        }
+        catch
+        {
+            $StillInstalled = @(
+                Get-AppxPackage `
+                    -AllUsers `
+                    -Name $Name `
+                    -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.PackageFullName -eq $Package.PackageFullName
+                }
+            )
+
+            if ($StillInstalled.Count -eq 0)
+            {
+                Write-D3PL0YLog ('Ya no estaba instalado: {0}' -f $Name) 'OK'
+            }
+            else
+            {
+                Write-D3PL0YWarning (
+                    'No se pudo eliminar {0}. {1}' -f
+                    $Name,
+                    $_.Exception.Message
+                )
+            }
+        }
+    }
+
+    $RemainingInstalled = @(
+        Get-AppxPackage `
+            -AllUsers `
+            -Name $Name `
+            -ErrorAction SilentlyContinue
+    )
+
+    $RemainingProvisioned = @(
+        Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -eq $Name }
+    )
+
+    if (
+        ($RemainingInstalled.Count -eq 0) -and
+        ($RemainingProvisioned.Count -eq 0)
+    )
+    {
+        if (-not $FoundPackage)
+        {
+            Write-D3PL0YLog ('No estaba instalado: {0}' -f $Name)
+        }
+    }
+    else
+    {
+        Write-D3PL0YWarning (
+            'Persisten restos de {0}: instalados={1}, aprovisionados={2}' -f
+            $Name,
+            $RemainingInstalled.Count,
+            $RemainingProvisioned.Count
+        )
+    }
+}
+
+function Uninstall-D3PL0YOneDrive
+{
+    Get-Process -Name OneDrive -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
+    $OneDriveSetup = @(
+        (Join-Path $env:SystemRoot 'System32\OneDriveSetup.exe'),
+        (Join-Path $env:SystemRoot 'SysWOW64\OneDriveSetup.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\OneDrive\Update\OneDriveSetup.exe')
+    ) |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        Select-Object -First 1
+
+    if ($null -ne $OneDriveSetup)
+    {
+        Write-D3PL0YLog 'Desinstalando Microsoft OneDrive.'
+
+        try
+        {
+            $UninstallProcess = Start-Process `
+                -FilePath $OneDriveSetup `
+                -ArgumentList @('/uninstall', '/allusers') `
+                -Wait `
+                -PassThru `
+                -WindowStyle Hidden
+
+            if ($UninstallProcess.ExitCode -ne 0)
+            {
+                Write-D3PL0YWarning (
+                    'OneDriveSetup devolvió el código {0}.' -f
+                    $UninstallProcess.ExitCode
+                )
+            }
+        }
+        catch
+        {
+            Write-D3PL0YWarning (
+                'No se pudo ejecutar OneDriveSetup. {0}' -f
+                $_.Exception.Message
+            )
+        }
+
+        Start-Sleep -Seconds 3
+    }
+    else
+    {
+        Write-D3PL0YLog 'No se encontró OneDriveSetup.exe.'
+    }
+
+    # Algunas versiones se registran también en WinGet. Este segundo método es
+    # idempotente y cubre instalaciones posteriores del cliente independiente.
+    if (Test-D3PL0YWingetPackage -Id 'Microsoft.OneDrive')
+    {
+        & winget.exe uninstall `
+            --id Microsoft.OneDrive `
+            --exact `
+            --silent `
+            --disable-interactivity `
+            --accept-source-agreements
+
+        if (
+            ($LASTEXITCODE -ne 0) -and
+            (Test-D3PL0YWingetPackage -Id 'Microsoft.OneDrive')
+        )
+        {
+            Write-D3PL0YWarning (
+                'WinGet no pudo completar la desinstalación de OneDrive.'
+            )
+        }
+    }
+
+    Remove-ItemProperty `
+        -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' `
+        -Name 'OneDrive' `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' `
+        -Name 'DisableFileSyncNGSC' `
+        -Value 1 `
+        -Type DWord
+
+    foreach ($NamespacePath in @(
+        'HKLM:\SOFTWARE\Classes\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}',
+        'HKLM:\SOFTWARE\Classes\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}'
+    ))
+    {
+        Set-D3PL0YRegistryValue `
+            -Path $NamespacePath `
+            -Name 'System.IsPinnedToNameSpaceTree' `
+            -Value 0 `
+            -Type DWord
+    }
+
+    Write-D3PL0YLog (
+        'OneDrive deshabilitado. No se ha borrado ninguna carpeta de datos del usuario.'
+    ) 'OK'
 }
 
 function Select-D3PL0YProfile
@@ -518,7 +838,7 @@ function Restart-D3PL0YExplorer
 {
     Write-D3PL0YLog 'Actualizando la configuración visual de Windows.'
 
-    & rundll32.exe user32.dll,UpdatePerUserSystemParameters
+    & rundll32.exe 'user32.dll,UpdatePerUserSystemParameters'
     Start-Sleep -Seconds 2
 
     Stop-Process `
@@ -600,6 +920,14 @@ if ([string]::IsNullOrWhiteSpace($SelectedD3PL0Y))
 
 $SelectedConfig = $D3PL0YProfiles[$SelectedD3PL0Y]
 $InstalledAppSummary = $SelectedConfig.AppNames -join ', '
+$DebloatSummary = if ($SkipDebloat)
+{
+    'Omitido mediante -SkipDebloat'
+}
+else
+{
+    'OneDrive y aplicaciones innecesarias eliminadas'
+}
 
 Set-D3PL0YStatus ('INICIANDO {0}' -f $SelectedD3PL0Y)
 Write-D3PL0YLog ('Perfil seleccionado: {0}' -f $SelectedD3PL0Y) 'OK'
@@ -624,11 +952,22 @@ Write-Host '└─────────────────────�
 # EJECUCIÓN
 # =============================================================================
 
-Invoke-D3PL0YStep -Name 'Comprobaciones previas' -Action {
+$PreflightPassed = Invoke-D3PL0YStep -Name 'Comprobaciones previas' -Action {
 
     if (-not (Test-D3PL0YAdministrator))
     {
         throw 'D3PL0Y debe ejecutarse como administrador.'
+    }
+
+    if (
+        [Environment]::Is64BitOperatingSystem -and
+        (-not [Environment]::Is64BitProcess)
+    )
+    {
+        throw (
+            'Ejecuta D3PL0Y desde Windows PowerShell de 64 bits; ' +
+            'la consola x86 no puede aplicar correctamente la pantalla de bloqueo.'
+        )
     }
 
     $OperatingSystem = Get-CimInstance Win32_OperatingSystem
@@ -657,16 +996,35 @@ Invoke-D3PL0YStep -Name 'Comprobaciones previas' -Action {
     {
         Write-D3PL0YWarning 'No se pudieron actualizar las fuentes de WinGet.'
     }
-} | Out-Null
+}
+
+if (-not $PreflightPassed)
+{
+    Set-D3PL0YStatus 'ABORTADO'
+
+    if ($script:TranscriptStarted)
+    {
+        try
+        {
+            Stop-Transcript | Out-Null
+            $script:TranscriptStarted = $false
+        }
+        catch
+        {
+        }
+    }
+
+    throw 'D3PL0Y se ha detenido porque falló una comprobación previa.'
+}
 
 Invoke-D3PL0YStep -Name 'Configurar energía' -Action {
 
     $PowerCommands = @(
         @('-h', 'off'),
         @('/change', 'standby-timeout-ac', '0'),
-        @('/change', 'monitor-timeout-ac', '0'),
-        @('/change', 'standby-timeout-dc', '0'),
-        @('/change', 'monitor-timeout-dc', '0')
+        @('/change', 'monitor-timeout-ac', '20'),
+        @('/change', 'standby-timeout-dc', '30'),
+        @('/change', 'monitor-timeout-dc', '10')
     )
 
     foreach ($Arguments in $PowerCommands)
@@ -685,173 +1043,62 @@ Invoke-D3PL0YStep -Name 'Configurar energía' -Action {
 
 if (-not $SkipDebloat)
 {
+    Invoke-D3PL0YStep -Name 'Desinstalar OneDrive' -Action {
+
+        Uninstall-D3PL0YOneDrive
+    } | Out-Null
+
     Invoke-D3PL0YStep -Name 'Eliminar aplicaciones preinstaladas' -Action {
 
+        # Lista deliberadamente conservadora: se mantienen Store, WinGet,
+        # Terminal, Bloc de notas, Calculadora, Fotos, Paint, Cámara,
+        # Recortes, codecs, Seguridad de Windows y componentes del sistema.
         $AppsToRemove = @(
+            'Clipchamp.Clipchamp',
+            'Microsoft.3DBuilder',
+            'Microsoft.549981C3F5F10',
+            'Microsoft.BingNews',
+            'Microsoft.BingWeather',
+            'Microsoft.Copilot',
+            'Microsoft.GamingApp',
+            'Microsoft.GetHelp',
+            'Microsoft.Getstarted',
+            'Microsoft.Microsoft3DViewer',
+            'Microsoft.MicrosoftOfficeHub',
+            'Microsoft.MicrosoftSolitaireCollection',
+            'Microsoft.MixedReality.Portal',
+            'Microsoft.OneDriveSync',
+            'Microsoft.OutlookForWindows',
+            'Microsoft.People',
+            'Microsoft.PowerAutomateDesktop',
+            'Microsoft.SkypeApp',
+            'Microsoft.Todos',
+            'Microsoft.WindowsFeedbackHub',
+            'Microsoft.WindowsMaps',
+            'Microsoft.Xbox.TCUI',
             'Microsoft.XboxApp',
+            'Microsoft.XboxGameOverlay',
             'Microsoft.XboxGamingOverlay',
             'Microsoft.XboxIdentityProvider',
             'Microsoft.XboxSpeechToTextOverlay',
-            'Microsoft.BingNews',
-            'Clipchamp.Clipchamp',
             'Microsoft.YourPhone',
-            'MicrosoftTeams',
-            'MSTeams',
-            'Microsoft.GetHelp',
-            'Microsoft.Getstarted',
-            'Microsoft.WindowsFeedbackHub',
             'Microsoft.ZuneMusic',
             'Microsoft.ZuneVideo',
-            'Microsoft.People',
-            'Microsoft.MicrosoftSolitaireCollection',
-            'Microsoft.PowerAutomateDesktop'
+            'MicrosoftTeams',
+            'MSTeams'
         )
 
         foreach ($Target in $AppsToRemove)
         {
-            $FoundPackage = $false
-
-            # Primero se elimina el aprovisionamiento de la imagen de Windows.
-            # Así la aplicación no se instalará automáticamente en usuarios nuevos.
-            $ProvisionedMatches = @(
-                Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
-                Where-Object { $_.DisplayName -eq $Target }
-            )
-
-            foreach ($Package in $ProvisionedMatches)
-            {
-                $FoundPackage = $true
-
-                try
-                {
-                    Remove-AppxProvisionedPackage `
-                        -Online `
-                        -PackageName $Package.PackageName `
-                        -ErrorAction Stop | Out-Null
-
-                    Write-D3PL0YLog (
-                        'Desaprovisionado: {0}' -f $Target
-                    ) 'OK'
-                }
-                catch
-                {
-                    # Algunos builds devuelven "archivo/ruta no encontrada" aunque
-                    # el paquete ya haya desaparecido. Se comprueba de nuevo antes
-                    # de registrar una advertencia real.
-                    $StillProvisioned = @(
-                        Get-AppxProvisionedPackage `
-                            -Online `
-                            -ErrorAction SilentlyContinue |
-                        Where-Object {
-                            $_.PackageName -eq $Package.PackageName
-                        }
-                    )
-
-                    if ($StillProvisioned.Count -eq 0)
-                    {
-                        Write-D3PL0YLog (
-                            'Ya no estaba aprovisionado: {0}' -f $Target
-                        ) 'OK'
-                    }
-                    else
-                    {
-                        Write-D3PL0YWarning (
-                            'No se pudo desaprovisionar {0}. {1}' -f
-                            $Target,
-                            $_.Exception.Message
-                        )
-                    }
-                }
-            }
-
-            # Después se elimina la aplicación de los perfiles ya existentes.
-            # La consulta se hace de nuevo para evitar trabajar con datos obsoletos.
-            $InstalledMatches = @(
-                Get-AppxPackage `
-                    -AllUsers `
-                    -Name $Target `
-                    -ErrorAction SilentlyContinue
-            )
-
-            foreach ($Package in $InstalledMatches)
-            {
-                $FoundPackage = $true
-
-                try
-                {
-                    Remove-AppxPackage `
-                        -Package $Package.PackageFullName `
-                        -AllUsers `
-                        -ErrorAction Stop
-
-                    Write-D3PL0YLog ('Eliminado: {0}' -f $Target) 'OK'
-                }
-                catch
-                {
-                    $StillInstalled = @(
-                        Get-AppxPackage `
-                            -AllUsers `
-                            -Name $Target `
-                            -ErrorAction SilentlyContinue |
-                        Where-Object {
-                            $_.PackageFullName -eq $Package.PackageFullName
-                        }
-                    )
-
-                    if ($StillInstalled.Count -eq 0)
-                    {
-                        Write-D3PL0YLog (
-                            'Ya no estaba instalado: {0}' -f $Target
-                        ) 'OK'
-                    }
-                    else
-                    {
-                        Write-D3PL0YWarning (
-                            'No se pudo eliminar {0}. {1}' -f
-                            $Target,
-                            $_.Exception.Message
-                        )
-                    }
-                }
-            }
-
-            $RemainingInstalled = @(
-                Get-AppxPackage `
-                    -AllUsers `
-                    -Name $Target `
-                    -ErrorAction SilentlyContinue
-            )
-
-            $RemainingProvisioned = @(
-                Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
-                Where-Object { $_.DisplayName -eq $Target }
-            )
-
-            if (
-                ($RemainingInstalled.Count -eq 0) -and
-                ($RemainingProvisioned.Count -eq 0)
-            )
-            {
-                if (-not $FoundPackage)
-                {
-                    Write-D3PL0YLog ('No estaba instalado: {0}' -f $Target)
-                }
-            }
-            else
-            {
-                Write-D3PL0YWarning (
-                    'Persisten restos de {0}: instalados={1}, aprovisionados={2}' -f
-                    $Target,
-                    $RemainingInstalled.Count,
-                    $RemainingProvisioned.Count
-                )
-            }
+            Remove-D3PL0YAppxPackage -Name $Target
         }
     } | Out-Null
 }
 else
 {
-    Write-D3PL0YWarning 'La eliminación de bloatware se ha omitido.'
+    Write-D3PL0YWarning (
+        'Se ha omitido la desinstalación de OneDrive y del bloatware.'
+    )
 }
 
 Invoke-D3PL0YStep -Name 'Configurar privacidad y sugerencias' -Action {
@@ -860,10 +1107,13 @@ Invoke-D3PL0YStep -Name 'Configurar privacidad y sugerencias' -Action {
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
 
     foreach ($Property in @(
+        'SubscribedContent-338387Enabled',
         'SubscribedContent-338388Enabled',
         'SubscribedContent-338389Enabled',
         'SubscribedContent-353694Enabled',
         'SubscribedContent-353696Enabled',
+        'RotatingLockScreenEnabled',
+        'RotatingLockScreenOverlayEnabled',
         'SystemPaneSuggestionsEnabled',
         'SilentInstalledAppsEnabled',
         'SoftLandingEnabled'
@@ -888,9 +1138,87 @@ Invoke-D3PL0YStep -Name 'Configurar privacidad y sugerencias' -Action {
         -Value 0 `
         -Type DWord
 
+    $CloudContentPolicy =
+        'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
+
+    foreach ($Property in @(
+        'DisableTailoredExperiencesWithDiagnosticData',
+        'DisableThirdPartySuggestions',
+        'DisableWindowsConsumerFeatures',
+        'DisableWindowsSpotlightFeatures',
+        'DisableWindowsSpotlightOnActionCenter',
+        'DisableWindowsSpotlightOnLockScreen',
+        'DisableWindowsSpotlightOnSettings',
+        'DisableWindowsSpotlightWindowsWelcomeExperience'
+    ))
+    {
+        Set-D3PL0YRegistryValue `
+            -Path $CloudContentPolicy `
+            -Name $Property `
+            -Value 1 `
+            -Type DWord
+    }
+
     Set-D3PL0YRegistryValue `
-        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' `
-        -Name 'DisableWindowsConsumerFeatures' `
+        -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' `
+        -Name 'Enabled' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Privacy' `
+        -Name 'TailoredExperiencesWithDiagnosticDataEnabled' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Microsoft\Input\TIPC' `
+        -Name 'Enabled' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement' `
+        -Name 'ScoobeSystemSettingEnabled' `
+        -Value 0 `
+        -Type DWord
+} | Out-Null
+
+Invoke-D3PL0YStep -Name 'Optimizar componentes de Windows 11' -Action {
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Policies\Microsoft\Windows\Explorer' `
+        -Name 'DisableSearchBoxSuggestions' `
+        -Value 1 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' `
+        -Name 'AllowNewsAndInterests' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\System\GameConfigStore' `
+        -Name 'GameDVR_Enabled' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR' `
+        -Name 'AppCaptureEnabled' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' `
+        -Name 'AllowGameDVR' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+        -Name 'LongPathsEnabled' `
         -Value 1 `
         -Type DWord
 } | Out-Null
@@ -976,7 +1304,37 @@ Invoke-D3PL0YStep -Name 'Aplicar tema oscuro y configurar Explorador' -Action {
 
     Set-D3PL0YRegistryValue `
         -Path $ExplorerAdvanced `
+        -Name 'TaskbarMn' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
         -Name 'ShowTaskViewButton' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'ShowSyncProviderNotifications' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'LaunchTo' `
+        -Value 1 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'Start_AccountNotifications' `
+        -Value 0 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $ExplorerAdvanced `
+        -Name 'Start_IrisRecommendations' `
         -Value 0 `
         -Type DWord
 
@@ -988,6 +1346,17 @@ Invoke-D3PL0YStep -Name 'Aplicar tema oscuro y configurar Explorador' -Action {
         -Name 'SearchboxTaskbarMode' `
         -Value 0 `
         -Type DWord
+
+    $ClassicContextMenu =
+        'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32'
+
+    if (-not (Test-Path -LiteralPath $ClassicContextMenu))
+    {
+        New-Item -Path $ClassicContextMenu -Force | Out-Null
+    }
+
+    Set-Item -LiteralPath $ClassicContextMenu -Value '' -Force
+    $script:ExplorerNeedsRestart = $true
 } | Out-Null
 
 Invoke-D3PL0YStep -Name 'Aplicar color de énfasis verde' -Action {
@@ -1149,7 +1518,7 @@ public static class D3PL0YCursorRefresh
         0x57,
         0,
         [IntPtr]::Zero,
-        0x01 -bor 0x02
+        (0x01 -bor 0x02)
     ) | Out-Null
 } | Out-Null
 
@@ -1164,7 +1533,9 @@ Invoke-D3PL0YStep -Name 'Aplicar fondo de escritorio' -Action {
     Invoke-D3PL0YDownload `
         -Uri $WallpaperUri `
         -Destination $WallpaperFile `
-        -Force:$RefreshAssets
+        -Force
+
+    Assert-D3PL0YPngFile -Path $WallpaperFile
 
     if (-not ('D3PL0YWallpaper' -as [type]))
     {
@@ -1214,7 +1585,24 @@ Invoke-D3PL0YStep -Name 'Configurar pantalla de bloqueo' -Action {
     Invoke-D3PL0YDownload `
         -Uri $LockUri `
         -Destination $LockImage `
-        -Force:$RefreshAssets
+        -Force
+
+    Assert-D3PL0YPngFile -Path $LockImage
+
+    # Aplica la imagen al usuario actual mediante la API de Windows. Este es el
+    # método principal en Windows 11 Pro sin administración MDM.
+    try
+    {
+        Set-D3PL0YCurrentUserLockScreen -Path $LockImage
+        Write-D3PL0YLog 'Pantalla de bloqueo aplicada al usuario actual.' 'OK'
+    }
+    catch
+    {
+        Write-D3PL0YWarning (
+            'La API de pantalla de bloqueo no respondió. Se usarán las directivas de respaldo. {0}' -f
+            $_.Exception.Message
+        )
+    }
 
     Set-D3PL0YRegistryValue `
         -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' `
@@ -1222,8 +1610,33 @@ Invoke-D3PL0YStep -Name 'Configurar pantalla de bloqueo' -Action {
         -Value $LockImage `
         -Type String
 
+    # PersonalizationCSP sirve como respaldo en ediciones/builds de Windows 11
+    # que no aplican inmediatamente la directiva clásica de Personalization.
+    $PersonalizationCsp =
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP'
+
+    Set-D3PL0YRegistryValue `
+        -Path $PersonalizationCsp `
+        -Name 'LockScreenImagePath' `
+        -Value $LockImage `
+        -Type String
+
+    Set-D3PL0YRegistryValue `
+        -Path $PersonalizationCsp `
+        -Name 'LockScreenImageUrl' `
+        -Value $LockImage `
+        -Type String
+
+    Set-D3PL0YRegistryValue `
+        -Path $PersonalizationCsp `
+        -Name 'LockScreenImageStatus' `
+        -Value 1 `
+        -Type DWord
+
     Write-D3PL0YLog (
-        'La pantalla de bloqueo se aplicará al actualizar la sesión o reiniciar.'
+        'Pantalla de bloqueo preparada para {0}: {1}. Se aplicará al reiniciar.' -f
+        $SelectedD3PL0Y,
+        $SelectedConfig.Lockscreen
     ) 'OK'
 } | Out-Null
 
@@ -1269,8 +1682,10 @@ $LogFile
 
 Notas:
 - Aplicaciones del perfil: $InstalledAppSummary.
+- Limpieza de Windows: $DebloatSummary.
 - Fondo de escritorio: $($SelectedConfig.Wallpaper).
 - Pantalla de bloqueo: $($SelectedConfig.Lockscreen).
+- Los archivos de la carpeta OneDrive del usuario no se eliminan.
 "@
 
 Set-Content `
