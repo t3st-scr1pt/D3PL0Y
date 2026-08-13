@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v2.1.0
+    D3PL0Y v2.1.2
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -26,6 +26,7 @@
     - Reducen publicidad, sugerencias y telemetría.
     - Desactivan Widgets, Game DVR, búsquedas web y experiencias promocionales.
     - Aplican ajustes seguros de productividad y privacidad en Windows 11.
+    - Usan una paleta verde en T3ST y morada en STUD10.
     - Descargan y aplican cursores, fondo de escritorio y pantalla de bloqueo.
 
 .PARAMETER D3PL0YProfile
@@ -74,7 +75,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '2.1.0'
+$Version = '2.1.2'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -101,6 +102,26 @@ $D3PL0YProfiles = [ordered]@{
         )
         Wallpaper = 't3st-scr1pt.png'
         Lockscreen = 't3st-scr1pt_lockscreen.png'
+        ThemeName = 'verde T3ST'
+        PrimaryColor = '#107C10'
+        SecondaryColor = '#0E6D0E'
+        SoftColor = '#81EF95'
+        AccentColor = 0xFF107C10
+        ColorizationColor = 0xC4107C10
+        AccentColorMenu = 0xFF107C10
+        StartColorMenu = 0xFF0E6D0E
+        AccentPalette = [byte[]](
+            0x95,0xEF,0x81,0x00,
+            0x45,0xE5,0x32,0x00,
+            0x19,0xA1,0x15,0x00,
+            0x10,0x7C,0x10,0x00,
+            0x0E,0x6D,0x0E,0x00,
+            0x08,0x4B,0x08,0x00,
+            0x03,0x2B,0x03,0x00,
+            0x4C,0x4A,0x48,0x00
+        )
+        UiColor = 'Green'
+        UiDarkColor = 'DarkGreen'
     }
 
     'STUD10-SCR1PT' = [pscustomobject]@{
@@ -122,6 +143,26 @@ $D3PL0YProfiles = [ordered]@{
         )
         Wallpaper = 'stud10-scr1pt.png'
         Lockscreen = 'stud10-scr1pt_lockscreen.png'
+        ThemeName = 'morado STUD10'
+        PrimaryColor = '#8A4FFF'
+        SecondaryColor = '#5725A8'
+        SoftColor = '#E6D8FF'
+        AccentColor = 0xFFFF4F8A
+        ColorizationColor = 0xC4FF4F8A
+        AccentColorMenu = 0xFFFF4F8A
+        StartColorMenu = 0xFFA82557
+        AccentPalette = [byte[]](
+            0xFF,0xD8,0xE6,0x00,
+            0xFF,0xA7,0xC9,0x00,
+            0xFF,0x6F,0xA8,0x00,
+            0xFF,0x4F,0x8A,0x00,
+            0xC7,0x32,0x6F,0x00,
+            0xA8,0x25,0x57,0x00,
+            0x67,0x13,0x35,0x00,
+            0x4C,0x4A,0x48,0x00
+        )
+        UiColor = 'Magenta'
+        UiDarkColor = 'DarkMagenta'
     }
 }
 
@@ -134,8 +175,11 @@ $LogFile = Join-Path $LogFolder ("install-{0}.log" -f $Timestamp)
 $script:SuccessCount = 0
 $script:WarningCount = 0
 $script:ErrorCount = 0
+$script:FailedSteps = New-Object System.Collections.Generic.List[string]
 $script:TranscriptStarted = $false
 $script:ExplorerNeedsRestart = $false
+$script:UiColor = 'Green'
+$script:UiDarkColor = 'DarkGreen'
 
 # =============================================================================
 # FUNCIONES
@@ -153,7 +197,7 @@ function Write-D3PL0YLog
 
     $Color = switch ($Level)
     {
-        'OK'    { 'Green' }
+        'OK'    { $script:UiColor }
         'WARN'  { 'Yellow' }
         'ERROR' { 'Red' }
         default { 'Gray' }
@@ -184,9 +228,9 @@ function Invoke-D3PL0YStep
     )
 
     Write-Host ''
-    Write-Host ('=' * 64) -ForegroundColor DarkGreen
-    Write-Host $Name -ForegroundColor Green
-    Write-Host ('=' * 64) -ForegroundColor DarkGreen
+    Write-Host ('=' * 64) -ForegroundColor $script:UiDarkColor
+    Write-Host $Name -ForegroundColor $script:UiColor
+    Write-Host ('=' * 64) -ForegroundColor $script:UiDarkColor
 
     Set-D3PL0YStatus $Name
 
@@ -200,7 +244,9 @@ function Invoke-D3PL0YStep
     catch
     {
         $script:ErrorCount++
-        Write-D3PL0YLog ('Error en {0}. {1}' -f $Name, $_.Exception.Message) 'ERROR'
+        $Failure = '{0}: {1}' -f $Name, $_.Exception.Message
+        $script:FailedSteps.Add($Failure)
+        Write-D3PL0YLog ('Error en {0}' -f $Failure) 'ERROR'
         return $false
     }
 }
@@ -250,18 +296,23 @@ function Set-D3PL0YRegistryValue
     $CurrentValue = $null
     $PropertyExists = $false
 
-    try
-    {
-        $CurrentValue = Get-ItemPropertyValue `
-            -LiteralPath $Path `
-            -Name $Name `
-            -ErrorAction Stop
+    # Consultar una propiedad inexistente con Get-ItemPropertyValue y
+    # ErrorAction Stop deja falsos errores en la transcripción. Esta consulta
+    # permite distinguir creación y actualización sin ensuciar el registro.
+    $CurrentProperties = Get-ItemProperty `
+        -LiteralPath $Path `
+        -Name $Name `
+        -ErrorAction SilentlyContinue
 
-        $PropertyExists = $true
-    }
-    catch
+    if ($null -ne $CurrentProperties)
     {
-        $PropertyExists = $false
+        $CurrentProperty = $CurrentProperties.PSObject.Properties[$Name]
+
+        if ($null -ne $CurrentProperty)
+        {
+            $CurrentValue = $CurrentProperty.Value
+            $PropertyExists = $true
+        }
     }
 
     $ValuesMatch = $false
@@ -291,16 +342,25 @@ function Set-D3PL0YRegistryValue
     {
         try
         {
-            # Set-ItemProperty crea el valor si no existe y lo actualiza si ya existe.
-            # Evita el fallo que puede provocar New-ItemProperty al sobrescribir
-            # determinados valores existentes del Registro en Windows 11.
-            Set-ItemProperty `
-                -LiteralPath $Path `
-                -Name $Name `
-                -Value $Value `
-                -Type $Type `
-                -Force `
-                -ErrorAction Stop
+            if ($PropertyExists)
+            {
+                Set-ItemProperty `
+                    -LiteralPath $Path `
+                    -Name $Name `
+                    -Value $Value `
+                    -Force `
+                    -ErrorAction Stop
+            }
+            else
+            {
+                New-ItemProperty `
+                    -LiteralPath $Path `
+                    -Name $Name `
+                    -Value $Value `
+                    -PropertyType $Type `
+                    -Force `
+                    -ErrorAction Stop | Out-Null
+            }
         }
         catch
         {
@@ -679,6 +739,8 @@ function Uninstall-D3PL0YOneDrive
     Get-Process -Name OneDrive -ErrorAction SilentlyContinue |
         Stop-Process -Force -ErrorAction SilentlyContinue
 
+    $OneDriveSetupSucceeded = $false
+
     $OneDriveSetup = @(
         (Join-Path $env:SystemRoot 'System32\OneDriveSetup.exe'),
         (Join-Path $env:SystemRoot 'SysWOW64\OneDriveSetup.exe'),
@@ -707,6 +769,11 @@ function Uninstall-D3PL0YOneDrive
                     $UninstallProcess.ExitCode
                 )
             }
+            else
+            {
+                $OneDriveSetupSucceeded = $true
+                Write-D3PL0YLog 'OneDriveSetup completó la desinstalación.' 'OK'
+            }
         }
         catch
         {
@@ -723,9 +790,13 @@ function Uninstall-D3PL0YOneDrive
         Write-D3PL0YLog 'No se encontró OneDriveSetup.exe.'
     }
 
-    # Algunas versiones se registran también en WinGet. Este segundo método es
-    # idempotente y cubre instalaciones posteriores del cliente independiente.
-    if (Test-D3PL0YWingetPackage -Id 'Microsoft.OneDrive')
+    # WinGet queda como método alternativo. No se ejecuta después de un
+    # OneDriveSetup correcto porque la entrada de aplicaciones puede tardar en
+    # actualizarse y producir un aviso falso aunque OneDrive ya no esté.
+    if (
+        (-not $OneDriveSetupSucceeded) -and
+        (Test-D3PL0YWingetPackage -Id 'Microsoft.OneDrive')
+    )
     {
         & winget.exe uninstall `
             --id Microsoft.OneDrive `
@@ -919,6 +990,8 @@ if ([string]::IsNullOrWhiteSpace($SelectedD3PL0Y))
 }
 
 $SelectedConfig = $D3PL0YProfiles[$SelectedD3PL0Y]
+$script:UiColor = $SelectedConfig.UiColor
+$script:UiDarkColor = $SelectedConfig.UiDarkColor
 $InstalledAppSummary = $SelectedConfig.AppNames -join ', '
 $DebloatSummary = if ($SkipDebloat)
 {
@@ -1359,20 +1432,22 @@ Invoke-D3PL0YStep -Name 'Aplicar tema oscuro y configurar Explorador' -Action {
     $script:ExplorerNeedsRestart = $true
 } | Out-Null
 
-Invoke-D3PL0YStep -Name 'Aplicar color de énfasis verde' -Action {
+Invoke-D3PL0YStep `
+    -Name ('Aplicar paleta {0}' -f $SelectedConfig.ThemeName) `
+    -Action {
 
     $Dwm = 'HKCU:\Software\Microsoft\Windows\DWM'
 
     Set-D3PL0YRegistryValue `
         -Path $Dwm `
         -Name 'AccentColor' `
-        -Value 0xFF107C10 `
+        -Value $SelectedConfig.AccentColor `
         -Type DWord
 
     Set-D3PL0YRegistryValue `
         -Path $Dwm `
         -Name 'ColorizationColor' `
-        -Value 0xC4107C10 `
+        -Value $SelectedConfig.ColorizationColor `
         -Type DWord
 
     Set-D3PL0YRegistryValue `
@@ -1390,33 +1465,22 @@ Invoke-D3PL0YStep -Name 'Aplicar color de énfasis verde' -Action {
     $Accent =
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Accent'
 
-    $AccentPalette = [byte[]](
-        0x95,0xEF,0x81,0x00,
-        0x45,0xE5,0x32,0x00,
-        0x19,0xA1,0x15,0x00,
-        0x10,0x7C,0x10,0x00,
-        0x0E,0x6D,0x0E,0x00,
-        0x08,0x4B,0x08,0x00,
-        0x03,0x2B,0x03,0x00,
-        0x4C,0x4A,0x48,0x00
-    )
-
     Set-D3PL0YRegistryValue `
         -Path $Accent `
         -Name 'AccentPalette' `
-        -Value $AccentPalette `
+        -Value $SelectedConfig.AccentPalette `
         -Type Binary
 
     Set-D3PL0YRegistryValue `
         -Path $Accent `
         -Name 'AccentColorMenu' `
-        -Value 0xFF107C10 `
+        -Value $SelectedConfig.AccentColorMenu `
         -Type DWord
 
     Set-D3PL0YRegistryValue `
         -Path $Accent `
         -Name 'StartColorMenu' `
-        -Value 0xFF0E6D0E `
+        -Value $SelectedConfig.StartColorMenu `
         -Type DWord
 } | Out-Null
 
@@ -1661,6 +1725,15 @@ else
 
 Set-D3PL0YStatus $FinalStatus
 
+$FailureSummary = if ($script:FailedSteps.Count -eq 0)
+{
+    'Ninguna.'
+}
+else
+{
+    '- ' + ($script:FailedSteps -join "`r`n- ")
+}
+
 $Summary = @"
 =================================
 D3PL0Y
@@ -1677,12 +1750,16 @@ Fases completadas: $script:SuccessCount
 Avisos: $script:WarningCount
 Errores: $script:ErrorCount
 
+Fases con error:
+$FailureSummary
+
 Log:
 $LogFile
 
 Notas:
 - Aplicaciones del perfil: $InstalledAppSummary.
 - Limpieza de Windows: $DebloatSummary.
+- Paleta: $($SelectedConfig.ThemeName) — principal $($SelectedConfig.PrimaryColor), secundaria $($SelectedConfig.SecondaryColor), suave $($SelectedConfig.SoftColor).
 - Fondo de escritorio: $($SelectedConfig.Wallpaper).
 - Pantalla de bloqueo: $($SelectedConfig.Lockscreen).
 - Los archivos de la carpeta OneDrive del usuario no se eliminan.
@@ -1694,7 +1771,7 @@ Set-Content `
     -Encoding UTF8
 
 Write-Host ''
-Write-Host $Summary -ForegroundColor Green
+Write-Host $Summary -ForegroundColor $script:UiColor
 
 if ($script:TranscriptStarted)
 {
@@ -1715,10 +1792,27 @@ if (-not $NoRestart)
         'Ejecuta shutdown /a para cancelarlo.'
     ) -ForegroundColor Yellow
 
-    $RestartComment = 'D3PL0Y v{0} - {1} - {2}' -f (
+    $RestartDetail = if ($script:FailedSteps.Count -gt 0)
+    {
+        $FirstFailure = $script:FailedSteps[0]
+
+        if ($FirstFailure.Length -gt 300)
+        {
+            $FirstFailure = $FirstFailure.Substring(0, 300)
+        }
+
+        ' - ERROR: {0}' -f $FirstFailure
+    }
+    else
+    {
+        ''
+    }
+
+    $RestartComment = 'D3PL0Y v{0} - {1} - {2}{3}' -f (
         $Version,
         $SelectedD3PL0Y,
-        $FinalStatus
+        $FinalStatus,
+        $RestartDetail
     )
 
     & shutdown.exe `
