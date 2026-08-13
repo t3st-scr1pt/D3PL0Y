@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v2.1.3
+    D3PL0Y v2.1.4
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -75,7 +75,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '2.1.3'
+$Version = '2.1.4'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -144,24 +144,24 @@ $D3PL0YProfiles = [ordered]@{
         Wallpaper = 'stud10-scr1pt.png'
         Lockscreen = 'stud10-scr1pt_lockscreen.png'
         ThemeName = 'LVI Music STUD10'
-        PrimaryColor = '#A922FB'
-        SecondaryColor = '#68159C'
-        SoftColor = '#F1D7FF'
-        AccentColor = 0xFFFB22A9
-        ColorizationColor = 0xC4FB22A9
-        AccentColorMenu = 0xFFFB22A9
-        StartColorMenu = 0xFFFB22A9
+        PrimaryColor = '#602071'
+        SecondaryColor = '#391344'
+        SoftColor = '#D9C9DD'
+        AccentColor = 0xFF712060
+        ColorizationColor = 0xC4712060
+        AccentColorMenu = 0xFF712060
+        StartColorMenu = 0xFF712060
         AccentPalette = [byte[]](
-            0xFF,0xD7,0xF1,0x00,
-            0xFF,0xA1,0xDF,0x00,
-            0xFD,0x5B,0xC6,0x00,
-            0xFB,0x22,0xA9,0x00,
-            0xD0,0x1C,0x8C,0x00,
-            0x9C,0x15,0x68,0x00,
-            0x65,0x0D,0x43,0x00,
+            0xDD,0xC9,0xD9,0x00,
+            0xBA,0x8F,0xB1,0x00,
+            0x8E,0x50,0x82,0x00,
+            0x71,0x20,0x60,0x00,
+            0x5B,0x1A,0x4E,0x00,
+            0x44,0x13,0x39,0x00,
+            0x2C,0x0C,0x25,0x00,
             0x4C,0x4A,0x48,0x00
         )
-        UiColor = 'Magenta'
+        UiColor = 'DarkMagenta'
         UiDarkColor = 'DarkMagenta'
     }
 }
@@ -294,6 +294,7 @@ function Set-D3PL0YRegistryValue
     }
 
     $CurrentValue = $null
+    $CurrentType = $null
     $PropertyExists = $false
 
     # Consultar una propiedad inexistente con Get-ItemPropertyValue y
@@ -312,12 +313,29 @@ function Set-D3PL0YRegistryValue
         {
             $CurrentValue = $CurrentProperty.Value
             $PropertyExists = $true
+
+            try
+            {
+                $RegistryKey = Get-Item `
+                    -LiteralPath $Path `
+                    -ErrorAction Stop
+
+                $CurrentType = [string]$RegistryKey.GetValueKind($Name)
+            }
+            catch
+            {
+                $CurrentType = $null
+            }
         }
     }
 
     $ValuesMatch = $false
+    $TypesMatch = (
+        $PropertyExists -and
+        ($CurrentType -eq $Type)
+    )
 
-    if ($PropertyExists)
+    if ($TypesMatch)
     {
         if (($CurrentValue -is [byte[]]) -and ($Value -is [byte[]]))
         {
@@ -342,25 +360,16 @@ function Set-D3PL0YRegistryValue
     {
         try
         {
-            if ($PropertyExists)
-            {
-                Set-ItemProperty `
-                    -LiteralPath $Path `
-                    -Name $Name `
-                    -Value $Value `
-                    -Force `
-                    -ErrorAction Stop
-            }
-            else
-            {
-                New-ItemProperty `
-                    -LiteralPath $Path `
-                    -Name $Name `
-                    -Value $Value `
-                    -PropertyType $Type `
-                    -Force `
-                    -ErrorAction Stop | Out-Null
-            }
+            # New-ItemProperty con -Force actualiza tanto el contenido como
+            # el tipo. Set-ItemProperty conserva el tipo anterior y falla si
+            # Windows o el fabricante dejaron el valor con un tipo anómalo.
+            New-ItemProperty `
+                -LiteralPath $Path `
+                -Name $Name `
+                -Value $Value `
+                -PropertyType $Type `
+                -Force `
+                -ErrorAction Stop | Out-Null
         }
         catch
         {
@@ -1369,11 +1378,24 @@ Invoke-D3PL0YStep -Name 'Aplicar tema oscuro y configurar Explorador' -Action {
         -Value 1 `
         -Type DWord
 
-    Set-D3PL0YRegistryValue `
-        -Path $ExplorerAdvanced `
-        -Name 'TaskbarDa' `
-        -Value 0 `
-        -Type DWord
+    try
+    {
+        Set-D3PL0YRegistryValue `
+            -Path $ExplorerAdvanced `
+            -Name 'TaskbarDa' `
+            -Value 0 `
+            -Type DWord
+    }
+    catch
+    {
+        # TaskbarDa solo controla la visibilidad de Widgets. Algunas versiones
+        # OEM o políticas del sistema protegen este valor; no debe impedir que
+        # se apliquen el tema y el resto de ajustes del Explorador.
+        Write-D3PL0YWarning (
+            'No se pudo ocultar el botón de Widgets mediante TaskbarDa: {0}' -f
+            $_.Exception.Message
+        )
+    }
 
     Set-D3PL0YRegistryValue `
         -Path $ExplorerAdvanced `
