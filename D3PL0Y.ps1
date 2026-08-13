@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v2.1.2
+    D3PL0Y v2.1.3
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
@@ -75,7 +75,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '2.1.2'
+$Version = '2.1.3'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -143,22 +143,22 @@ $D3PL0YProfiles = [ordered]@{
         )
         Wallpaper = 'stud10-scr1pt.png'
         Lockscreen = 'stud10-scr1pt_lockscreen.png'
-        ThemeName = 'morado STUD10'
-        PrimaryColor = '#8A4FFF'
-        SecondaryColor = '#5725A8'
-        SoftColor = '#E6D8FF'
-        AccentColor = 0xFFFF4F8A
-        ColorizationColor = 0xC4FF4F8A
-        AccentColorMenu = 0xFFFF4F8A
-        StartColorMenu = 0xFFA82557
+        ThemeName = 'LVI Music STUD10'
+        PrimaryColor = '#A922FB'
+        SecondaryColor = '#68159C'
+        SoftColor = '#F1D7FF'
+        AccentColor = 0xFFFB22A9
+        ColorizationColor = 0xC4FB22A9
+        AccentColorMenu = 0xFFFB22A9
+        StartColorMenu = 0xFFFB22A9
         AccentPalette = [byte[]](
-            0xFF,0xD8,0xE6,0x00,
-            0xFF,0xA7,0xC9,0x00,
-            0xFF,0x6F,0xA8,0x00,
-            0xFF,0x4F,0x8A,0x00,
-            0xC7,0x32,0x6F,0x00,
-            0xA8,0x25,0x57,0x00,
-            0x67,0x13,0x35,0x00,
+            0xFF,0xD7,0xF1,0x00,
+            0xFF,0xA1,0xDF,0x00,
+            0xFD,0x5B,0xC6,0x00,
+            0xFB,0x22,0xA9,0x00,
+            0xD0,0x1C,0x8C,0x00,
+            0x9C,0x15,0x68,0x00,
+            0x65,0x0D,0x43,0x00,
             0x4C,0x4A,0x48,0x00
         )
         UiColor = 'Magenta'
