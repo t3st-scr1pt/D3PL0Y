@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    SCR1PT v1.1.0 - Lanzador maestro de scripts PowerShell.
+    SCR1PT v1.1.1 - Lanzador maestro de scripts PowerShell.
 
 .DESCRIPTION
     Muestra el catalogo integrado de SCR1PT y ejecuta el script elegido en un
@@ -35,7 +35,7 @@
 
 .NOTES
     Proyecto: SCR1PT
-    Version: 1.1.0
+    Version: 1.1.1
     Repositorio: https://github.com/t3st-scr1pt/D3PL0Y
 #>
 
@@ -45,7 +45,8 @@ param(
     [switch]$List,
 
     [Parameter()]
-    [ValidatePattern('^[a-z0-9][a-z0-9-]*$')]
+    # La validacion se realiza manualmente: ValidatePattern rechaza el valor
+    # vacio implicito al ejecutar el script mediante Invoke-Expression.
     [string]$Run,
 
     [Parameter()]
@@ -57,7 +58,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $script:ProjectName = 'SCR1PT'
-$script:Version = '1.1.0'
+$script:Version = '1.1.1'
 $script:RepositoryRaw = 'https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main'
 $script:ScriptsRaw = '{0}/SCR1PT' -f $script:RepositoryRaw
 $script:AllowedRawPrefix = '{0}/' -f $script:ScriptsRaw
@@ -71,7 +72,7 @@ $script:TemporaryRoot = Join-Path ([IO.Path]::GetTempPath()) 'SCR1PT'
 
 $script:Catalog = [pscustomobject]@{
     schemaVersion = 1
-    catalogVersion = '1.1.0'
+    catalogVersion = '1.1.1'
     updated = '2026-08-15'
     scripts = @(
         [pscustomobject]@{
@@ -484,6 +485,10 @@ try {
     }
 
     if ($Run) {
+        if ($Run -notmatch '^[a-z0-9][a-z0-9-]*$') {
+            throw ('El identificador indicado en -Run no es valido: {0}.' -f $Run)
+        }
+
         $selected = @($scripts | Where-Object { $_.id -eq $Run })
         if ($selected.Count -ne 1) {
             throw ('No existe ningun script habilitado con el identificador {0}.' -f $Run)
