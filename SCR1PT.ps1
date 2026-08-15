@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    SCR1PT v1.1.1 - Lanzador maestro de scripts PowerShell.
+    SCR1PT v1.1.2 - Lanzador maestro de scripts PowerShell.
 
 .DESCRIPTION
     Muestra el catalogo integrado de SCR1PT y ejecuta el script elegido en un
@@ -35,7 +35,7 @@
 
 .NOTES
     Proyecto: SCR1PT
-    Version: 1.1.1
+    Version: 1.1.2
     Repositorio: https://github.com/t3st-scr1pt/D3PL0Y
 #>
 
@@ -58,7 +58,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $script:ProjectName = 'SCR1PT'
-$script:Version = '1.1.1'
+$script:Version = '1.1.2'
 $script:RepositoryRaw = 'https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main'
 $script:ScriptsRaw = '{0}/SCR1PT' -f $script:RepositoryRaw
 $script:AllowedRawPrefix = '{0}/' -f $script:ScriptsRaw
@@ -72,7 +72,7 @@ $script:TemporaryRoot = Join-Path ([IO.Path]::GetTempPath()) 'SCR1PT'
 
 $script:Catalog = [pscustomobject]@{
     schemaVersion = 1
-    catalogVersion = '1.1.1'
+    catalogVersion = '1.1.2'
     updated = '2026-08-15'
     scripts = @(
         [pscustomobject]@{
@@ -366,10 +366,22 @@ function Save-Scr1ptPayload {
     $destination = Join-Path $sessionFolder ('{0}.ps1' -f $safeId)
 
     Enable-Tls12
-    Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $destination -Headers @{
+    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -Headers @{
         'User-Agent' = 'SCR1PT-PowerShell-Launcher'
         'Cache-Control' = 'no-cache'
     }
+
+    # Windows PowerShell 5.1 interpreta los archivos UTF-8 sin BOM usando la
+    # pagina de codigos ANSI del sistema. Esto puede romper cadenas que
+    # contienen acentos o caracteres graficos. Se normaliza cada descarga a
+    # UTF-8 con BOM antes de ejecutarla como archivo PS1.
+    $content = [string]$response.Content
+    if ($content.Length -gt 0 -and $content[0] -eq [char]0xFEFF) {
+        $content = $content.Substring(1)
+    }
+
+    $utf8WithBom = New-Object System.Text.UTF8Encoding($true)
+    [IO.File]::WriteAllText($destination, $content, $utf8WithBom)
 
     $fileInfo = Get-Item -LiteralPath $destination
     if ($fileInfo.Length -eq 0) {
