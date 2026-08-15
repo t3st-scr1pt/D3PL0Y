@@ -3,34 +3,42 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v2.1.4
+    D3PL0Y v2.2.0
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
 
-    D3PL0Y permite elegir entre dos perfiles:
+    D3PL0Y permite elegir entre tres perfiles:
 
-    T3ST-SCR1PT:
+    P0RT4L-SCR1PT:
     - Configuración general del equipo.
     - Instala Google Chrome, Google Drive y Tailscale.
-    - Aplica los fondos específicos de T3ST-SCR1PT.
+    - Aplica los fondos específicos de P0RT4L-SCR1PT.
 
     STUD10-SCR1PT:
     - Configuración orientada a edición de imagen, vídeo y música.
     - Instala Google Chrome, Google Drive, Tailscale, Audacity y GIMP.
     - Aplica los fondos específicos de STUD10-SCR1PT.
 
-    Ambos perfiles:
+    C0NTR0L-SCR1PT:
+    - Configuración para un equipo de administración disponible 24/7.
+    - Instala Chrome, Drive, Tailscale, PowerShell 7 y Visual Studio Code.
+    - Prepara Tailscale desatendido, RDP con NLA limitado a Tailscale y WOL.
+    - Genera un informe de salud semanal del equipo.
+
+    Los tres perfiles:
+    - Cambian el nombre del equipo para que coincida con el perfil.
     - Configuran las opciones de energía.
     - Desinstalan OneDrive y eliminan To Do, Xbox/Xbox Live y bloatware.
     - Reducen publicidad, sugerencias y telemetría.
     - Desactivan Widgets, Game DVR, búsquedas web y experiencias promocionales.
     - Aplican ajustes seguros de productividad y privacidad en Windows 11.
-    - Usan una paleta verde en T3ST y morada en STUD10.
+    - Usan una paleta verde en P0RT4L, morada en STUD10 y gris en C0NTR0L.
     - Descargan y aplican cursores, fondo de escritorio y pantalla de bloqueo.
 
 .PARAMETER D3PL0YProfile
-    Selecciona directamente el perfil T3ST-SCR1PT o STUD10-SCR1PT.
+    Selecciona directamente P0RT4L-SCR1PT, STUD10-SCR1PT o
+    C0NTR0L-SCR1PT.
     Si no se indica, D3PL0Y mostrará un menú interactivo.
 
 .PARAMETER NoRestart
@@ -50,6 +58,9 @@
 
 .EXAMPLE
     .\D3PL0Y.ps1 -D3PL0YProfile STUD10-SCR1PT
+
+.EXAMPLE
+    .\D3PL0Y.ps1 -D3PL0YProfile C0NTR0L-SCR1PT
 
 .EXAMPLE
     .\D3PL0Y.ps1 -NoRestart
@@ -75,7 +86,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '2.1.4'
+$Version = '2.2.0'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -87,9 +98,10 @@ $LockFolder = Join-Path $env:ProgramData 'D3PL0Y'
 $RepositoryRaw = 'https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main'
 
 $D3PL0YProfiles = [ordered]@{
-    'T3ST-SCR1PT' = [pscustomobject]@{
-        DisplayName = 'T3ST-SCR1PT'
-        Description = 'D3PL0Y general para equipos de uso diario y administración.'
+    'P0RT4L-SCR1PT' = [pscustomobject]@{
+        DisplayName = 'P0RT4L-SCR1PT'
+        TargetComputerName = 'P0RT4L-SCR1PT'
+        Description = 'D3PL0Y general para un equipo portátil de uso diario.'
         Apps = @(
             'Google.Chrome',
             'Google.GoogleDrive',
@@ -100,9 +112,9 @@ $D3PL0YProfiles = [ordered]@{
             'Google Drive',
             'Tailscale'
         )
-        Wallpaper = 't3st-scr1pt.png'
-        Lockscreen = 't3st-scr1pt_lockscreen.png'
-        ThemeName = 'verde T3ST'
+        Wallpaper = 'p0rt4l-scr1pt.png'
+        Lockscreen = 'p0rt4l-scr1pt_lockscreen.png'
+        ThemeName = 'verde P0RT4L'
         PrimaryColor = '#107C10'
         SecondaryColor = '#0E6D0E'
         SoftColor = '#81EF95'
@@ -126,6 +138,7 @@ $D3PL0YProfiles = [ordered]@{
 
     'STUD10-SCR1PT' = [pscustomobject]@{
         DisplayName = 'STUD10-SCR1PT'
+        TargetComputerName = 'STUD10-SCR1PT'
         Description = 'D3PL0Y para edición de imagen, vídeo y música.'
         Apps = @(
             'Google.Chrome',
@@ -163,6 +176,48 @@ $D3PL0YProfiles = [ordered]@{
         )
         UiColor = 'DarkMagenta'
         UiDarkColor = 'DarkMagenta'
+    }
+
+    'C0NTR0L-SCR1PT' = [pscustomobject]@{
+        DisplayName = 'C0NTR0L-SCR1PT'
+        TargetComputerName = 'C0NTR0L-SCR1PT'
+        Description = 'D3PL0Y para administración, supervisión y disponibilidad 24/7.'
+        Apps = @(
+            'Google.Chrome',
+            'Google.GoogleDrive',
+            'Tailscale.Tailscale',
+            'Microsoft.PowerShell',
+            'Microsoft.VisualStudioCode'
+        )
+        AppNames = @(
+            'Google Chrome',
+            'Google Drive',
+            'Tailscale',
+            'PowerShell 7',
+            'Visual Studio Code'
+        )
+        Wallpaper = 'c0ntr0l-scr1pt.png'
+        Lockscreen = 'c0ntr0l-scr1pt_lockscreen.png'
+        ThemeName = 'gris plata C0NTR0L'
+        PrimaryColor = '#8A929B'
+        SecondaryColor = '#50575E'
+        SoftColor = '#D7DCE2'
+        AccentColor = 0xFF9B928A
+        ColorizationColor = 0xC49B928A
+        AccentColorMenu = 0xFF9B928A
+        StartColorMenu = 0xFF5E5750
+        AccentPalette = [byte[]](
+            0xE2,0xDC,0xD7,0x00,
+            0xD2,0xCB,0xC5,0x00,
+            0xBF,0xB6,0xAE,0x00,
+            0x9B,0x92,0x8A,0x00,
+            0x80,0x77,0x6F,0x00,
+            0x5E,0x57,0x50,0x00,
+            0x3E,0x39,0x34,0x00,
+            0x4C,0x4A,0x48,0x00
+        )
+        UiColor = 'Gray'
+        UiDarkColor = 'DarkGray'
     }
 }
 
@@ -272,6 +327,108 @@ function Test-D3PL0YAdministrator
     )
 }
 
+function Set-D3PL0YRegistryValueNative
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        $Value,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('String', 'ExpandString', 'Binary', 'DWord', 'MultiString', 'QWord')]
+        [string]$Type
+    )
+
+    $NativePath = if ($Path.StartsWith('HKCU:\'))
+    {
+        'HKCU\{0}' -f $Path.Substring(6)
+    }
+    elseif ($Path.StartsWith('HKLM:\'))
+    {
+        'HKLM\{0}' -f $Path.Substring(6)
+    }
+    else
+    {
+        throw "Ruta de Registro no compatible con reg.exe: $Path"
+    }
+
+    $NativeType = switch ($Type)
+    {
+        'String'       { 'REG_SZ' }
+        'ExpandString' { 'REG_EXPAND_SZ' }
+        'Binary'       { 'REG_BINARY' }
+        'DWord'        { 'REG_DWORD' }
+        'MultiString'  { 'REG_MULTI_SZ' }
+        'QWord'        { 'REG_QWORD' }
+    }
+
+    $NativeData = switch ($Type)
+    {
+        'Binary'
+        {
+            ([byte[]]$Value | ForEach-Object {
+                '{0:X2}' -f $_
+            }) -join ''
+        }
+        'DWord'
+        {
+            $NumericValue = [Convert]::ToInt64($Value)
+
+            if ($NumericValue -lt 0)
+            {
+                $NumericValue += 4294967296
+            }
+
+            '0x{0:X8}' -f $NumericValue
+        }
+        'QWord'
+        {
+            '0x{0:X16}' -f [Convert]::ToInt64($Value)
+        }
+        'MultiString'
+        {
+            ([string[]]$Value) -join '\0'
+        }
+        default
+        {
+            [string]$Value
+        }
+    }
+
+    $Arguments = @(
+        'ADD',
+        $NativePath,
+        '/v',
+        $Name,
+        '/t',
+        $NativeType,
+        '/d',
+        $NativeData,
+        '/f'
+    )
+
+    if ($Type -eq 'MultiString')
+    {
+        $Arguments += @('/s', '\0')
+    }
+
+    $NativeOutput = & reg.exe @Arguments 2>&1
+
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw (
+            'reg.exe devolvió el código {0}: {1}' -f
+            $LASTEXITCODE,
+            (($NativeOutput | Out-String).Trim())
+        )
+    }
+}
+
 function Set-D3PL0YRegistryValue
 {
     param(
@@ -290,7 +447,38 @@ function Set-D3PL0YRegistryValue
 
     if (-not (Test-Path -LiteralPath $Path))
     {
-        New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
+        try
+        {
+            New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
+        }
+        catch
+        {
+            $ProviderError = $_.Exception.Message
+
+            try
+            {
+                # reg.exe crea también la clave si todavía no existe.
+                Set-D3PL0YRegistryValueNative `
+                    -Path $Path `
+                    -Name $Name `
+                    -Value $Value `
+                    -Type $Type
+
+                $script:ExplorerNeedsRestart = $true
+                return
+            }
+            catch
+            {
+                throw (
+                    "No se pudo crear '{0}' ni escribir '{1}' como {2}. PowerShell: {3} Alternativa nativa: {4}" -f
+                    $Path,
+                    $Name,
+                    $Type,
+                    $ProviderError,
+                    $_.Exception.Message
+                )
+            }
+        }
     }
 
     $CurrentValue = $null
@@ -373,16 +561,67 @@ function Set-D3PL0YRegistryValue
         }
         catch
         {
-            throw (
-                "No se pudo escribir '{0}' en '{1}' como {2}. {3}" -f
-                $Name,
-                $Path,
-                $Type,
-                $_.Exception.Message
-            )
+            $ProviderError = $_.Exception.Message
+
+            try
+            {
+                # Algunas claves de Windows 11 rechazan la operación del
+                # proveedor de PowerShell aunque permitan la API nativa.
+                Set-D3PL0YRegistryValueNative `
+                    -Path $Path `
+                    -Name $Name `
+                    -Value $Value `
+                    -Type $Type
+            }
+            catch
+            {
+                throw (
+                    "No se pudo escribir '{0}' en '{1}' como {2}. PowerShell: {3} Alternativa nativa: {4}" -f
+                    $Name,
+                    $Path,
+                    $Type,
+                    $ProviderError,
+                    $_.Exception.Message
+                )
+            }
         }
 
         $script:ExplorerNeedsRestart = $true
+    }
+}
+
+function Set-D3PL0YOptionalRegistryValue
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        $Value,
+
+        [ValidateSet('String', 'ExpandString', 'Binary', 'DWord', 'MultiString', 'QWord')]
+        [string]$Type = 'DWord'
+    )
+
+    try
+    {
+        Set-D3PL0YRegistryValue `
+            -Path $Path `
+            -Name $Name `
+            -Value $Value `
+            -Type $Type
+    }
+    catch
+    {
+        Write-D3PL0YWarning (
+            "Ajuste opcional omitido: '{0}' en '{1}'. {2}" -f
+            $Name,
+            $Path,
+            $_.Exception.Message
+        )
     }
 }
 
@@ -854,6 +1093,635 @@ function Uninstall-D3PL0YOneDrive
     ) 'OK'
 }
 
+function Set-D3PL0YComputerName
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TargetName
+    )
+
+    if ($TargetName.Length -gt 15)
+    {
+        throw "El nombre de equipo supera el límite de 15 caracteres: $TargetName"
+    }
+
+    $CurrentName = [Environment]::MachineName
+    $PendingName = $null
+
+    try
+    {
+        $PendingName = Get-ItemPropertyValue `
+            -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName' `
+            -Name 'ComputerName' `
+            -ErrorAction Stop
+    }
+    catch
+    {
+        $PendingName = $CurrentName
+    }
+
+    if ($PendingName -ieq $TargetName)
+    {
+        if ($CurrentName -ieq $TargetName)
+        {
+            Write-D3PL0YLog ('El equipo ya se llama {0}.' -f $TargetName) 'OK'
+        }
+        else
+        {
+            Write-D3PL0YLog (
+                'El cambio de nombre a {0} ya está pendiente de reinicio.' -f
+                $TargetName
+            ) 'OK'
+        }
+
+        return
+    }
+
+    Rename-Computer -NewName $TargetName -Force -ErrorAction Stop
+    Write-D3PL0YLog (
+        'Nombre de equipo preparado: {0} -> {1}. Se aplicará al reiniciar.' -f
+        $CurrentName,
+        $TargetName
+    ) 'OK'
+}
+
+function Get-D3PL0YTailscaleCli
+{
+    $Command = Get-Command tailscale.exe -ErrorAction SilentlyContinue
+
+    if ($null -ne $Command)
+    {
+        return $Command.Source
+    }
+
+    foreach ($Candidate in @(
+        (Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Tailscale\tailscale.exe')
+    ))
+    {
+        if (
+            (-not [string]::IsNullOrWhiteSpace($Candidate)) -and
+            (Test-Path -LiteralPath $Candidate -PathType Leaf)
+        )
+        {
+            return $Candidate
+        }
+    }
+
+    return $null
+}
+
+function Enable-D3PL0YTailscaleUnattended
+{
+    $TailscaleCli = Get-D3PL0YTailscaleCli
+
+    if ([string]::IsNullOrWhiteSpace($TailscaleCli))
+    {
+        throw 'No se encontró tailscale.exe después de instalar Tailscale.'
+    }
+
+    $HelperPath = Join-Path $ConfigFolder 'Enable-TailscaleUnattended.ps1'
+    $TaskName = 'D3PL0Y-TailscaleUnattended'
+    $HelperContent = @'
+$ErrorActionPreference = 'SilentlyContinue'
+
+$Candidates = @(
+    (Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Tailscale\tailscale.exe')
+)
+
+$TailscaleCli = $Candidates |
+    Where-Object {
+        (-not [string]::IsNullOrWhiteSpace($_)) -and
+        (Test-Path -LiteralPath $_ -PathType Leaf)
+    } |
+    Select-Object -First 1
+
+if ($null -eq $TailscaleCli)
+{
+    exit 1
+}
+
+for ($Attempt = 1; $Attempt -le 60; $Attempt++)
+{
+    $StatusText = & $TailscaleCli status --json 2>$null | Out-String
+
+    try
+    {
+        $Status = $StatusText | ConvertFrom-Json
+    }
+    catch
+    {
+        $Status = $null
+    }
+
+    if (($null -ne $Status) -and ($Status.BackendState -eq 'Running'))
+    {
+        & $TailscaleCli up --unattended=true --timeout=20s 2>$null | Out-Null
+
+        if ($LASTEXITCODE -eq 0)
+        {
+            Disable-ScheduledTask `
+                -TaskName 'D3PL0Y-TailscaleUnattended' `
+                -ErrorAction SilentlyContinue | Out-Null
+
+            exit 0
+        }
+    }
+
+    Start-Sleep -Seconds 30
+}
+
+exit 3
+'@
+
+    Set-Content `
+        -LiteralPath $HelperPath `
+        -Value $HelperContent `
+        -Encoding UTF8
+
+    $CurrentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $PowerShellExe = Join-Path `
+        $env:SystemRoot `
+        'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $TaskAction = New-ScheduledTaskAction `
+        -Execute $PowerShellExe `
+        -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $HelperPath)
+    $TaskTrigger = New-ScheduledTaskTrigger `
+        -AtLogOn `
+        -User $CurrentUser
+    $TaskPrincipal = New-ScheduledTaskPrincipal `
+        -UserId $CurrentUser `
+        -LogonType Interactive `
+        -RunLevel Highest
+    $TaskSettings = New-ScheduledTaskSettingsSet `
+        -StartWhenAvailable `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 35)
+
+    Register-ScheduledTask `
+        -TaskName $TaskName `
+        -Action $TaskAction `
+        -Trigger $TaskTrigger `
+        -Principal $TaskPrincipal `
+        -Settings $TaskSettings `
+        -Description 'Activa el modo desatendido de Tailscale después de que el usuario inicie sesión en su tailnet.' `
+        -Force | Out-Null
+
+    $StatusText = & $TailscaleCli status --json 2>$null | Out-String
+    $BackendState = $null
+
+    try
+    {
+        $BackendState = ($StatusText | ConvertFrom-Json).BackendState
+    }
+    catch
+    {
+        $BackendState = $null
+    }
+
+    if ($BackendState -eq 'Running')
+    {
+        & $TailscaleCli up --unattended=true --timeout=20s | Out-Null
+
+        if ($LASTEXITCODE -eq 0)
+        {
+            Disable-ScheduledTask `
+                -TaskName $TaskName `
+                -ErrorAction SilentlyContinue | Out-Null
+
+            Write-D3PL0YLog 'Tailscale configurado en modo desatendido.' 'OK'
+            return
+        }
+
+        Write-D3PL0YWarning (
+            'Tailscale está conectado, pero no aceptó todavía el modo desatendido. ' +
+            'La tarea de inicio de sesión volverá a intentarlo.'
+        )
+        return
+    }
+
+    Write-D3PL0YWarning (
+        'Tailscale aún requiere iniciar sesión. Tras hacerlo, la tarea ' +
+        'D3PL0Y-TailscaleUnattended activará automáticamente el modo desatendido.'
+    )
+}
+
+function Enable-D3PL0YRemoteDesktop
+{
+    $OperatingSystem = Get-CimInstance Win32_OperatingSystem
+    $EditionId = Get-ItemPropertyValue `
+        -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+        -Name 'EditionID' `
+        -ErrorAction SilentlyContinue
+
+    if (
+        ($OperatingSystem.ProductType -eq 1) -and
+        ($EditionId -notmatch 'Professional|Enterprise|Education|IoTEnterprise')
+    )
+    {
+        Write-D3PL0YWarning (
+            'Esta edición de Windows no admite conexiones RDP entrantes. ' +
+            'La configuración de Escritorio remoto se ha omitido.'
+        )
+        return
+    }
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' `
+        -Name 'fDenyTSConnections' `
+        -Value 0 `
+        -Type DWord
+
+    $RdpTcp =
+        'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+
+    Set-D3PL0YRegistryValue `
+        -Path $RdpTcp `
+        -Name 'UserAuthentication' `
+        -Value 1 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $RdpTcp `
+        -Name 'SecurityLayer' `
+        -Value 2 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $RdpTcp `
+        -Name 'MinEncryptionLevel' `
+        -Value 3 `
+        -Type DWord
+
+    if (-not (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue))
+    {
+        throw 'No están disponibles los cmdlets de Firewall de Windows.'
+    }
+
+    # Desactiva las reglas integradas, que permiten acceso desde toda la LAN.
+    # D3PL0Y crea reglas propias limitadas al rango IPv4 de Tailscale.
+    Get-NetFirewallRule `
+        -Name 'RemoteDesktop-*' `
+        -ErrorAction SilentlyContinue |
+        Disable-NetFirewallRule -ErrorAction SilentlyContinue
+
+    foreach ($Protocol in @('TCP', 'UDP'))
+    {
+        $RuleName = 'D3PL0Y-C0NTR0L-RDP-{0}' -f $Protocol
+        $ExistingRule = Get-NetFirewallRule `
+            -Name $RuleName `
+            -ErrorAction SilentlyContinue
+
+        if ($null -eq $ExistingRule)
+        {
+            New-NetFirewallRule `
+                -Name $RuleName `
+                -DisplayName ('D3PL0Y - RDP por Tailscale ({0})' -f $Protocol) `
+                -Description 'Permite RDP únicamente desde direcciones IPv4 de Tailscale.' `
+                -Direction Inbound `
+                -Action Allow `
+                -Enabled True `
+                -Profile Any `
+                -Protocol $Protocol `
+                -LocalPort 3389 `
+                -RemoteAddress '100.64.0.0/10' | Out-Null
+        }
+        else
+        {
+            $ExistingRule |
+                Set-NetFirewallRule `
+                    -Enabled True `
+                    -Direction Inbound `
+                    -Action Allow `
+                    -Profile Any | Out-Null
+
+            $ExistingRule |
+                Get-NetFirewallAddressFilter |
+                Set-NetFirewallAddressFilter `
+                    -RemoteAddress '100.64.0.0/10' | Out-Null
+        }
+    }
+
+    Write-D3PL0YLog (
+        'RDP habilitado con NLA; el Firewall solo admite origen Tailscale (100.64.0.0/10).'
+    ) 'OK'
+}
+
+function Set-D3PL0YSecurityBaseline
+{
+    Set-NetFirewallProfile `
+        -Profile Domain,Private,Public `
+        -Enabled True `
+        -ErrorAction Stop
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' `
+        -Name 'EnableSmartScreen' `
+        -Value 1 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' `
+        -Name 'ShellSmartScreenLevel' `
+        -Value 'Warn' `
+        -Type String
+
+    $UacPolicy =
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+
+    Set-D3PL0YRegistryValue `
+        -Path $UacPolicy `
+        -Name 'EnableLUA' `
+        -Value 1 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $UacPolicy `
+        -Name 'ConsentPromptBehaviorAdmin' `
+        -Value 5 `
+        -Type DWord
+
+    Set-D3PL0YRegistryValue `
+        -Path $UacPolicy `
+        -Name 'PromptOnSecureDesktop' `
+        -Value 1 `
+        -Type DWord
+
+    try
+    {
+        if (Get-Command Set-MpPreference -ErrorAction SilentlyContinue)
+        {
+            Set-MpPreference `
+                -DisableRealtimeMonitoring $false `
+                -ErrorAction Stop
+        }
+    }
+    catch
+    {
+        Write-D3PL0YWarning (
+            'Defender no permitió reafirmar la protección en tiempo real: {0}' -f
+            $_.Exception.Message
+        )
+    }
+
+    try
+    {
+        $WindowsUpdateService = Get-Service `
+            -Name wuauserv `
+            -ErrorAction Stop
+
+        if ($WindowsUpdateService.StartType -eq 'Disabled')
+        {
+            Set-Service `
+                -Name wuauserv `
+                -StartupType Manual `
+                -ErrorAction Stop
+        }
+    }
+    catch
+    {
+        Write-D3PL0YWarning (
+            'No se pudo comprobar o reactivar Windows Update: {0}' -f
+            $_.Exception.Message
+        )
+    }
+
+    try
+    {
+        $Smb1 = Get-WindowsOptionalFeature `
+            -Online `
+            -FeatureName SMB1Protocol `
+            -ErrorAction Stop
+
+        if ($Smb1.State -eq 'Enabled')
+        {
+            Disable-WindowsOptionalFeature `
+                -Online `
+                -FeatureName SMB1Protocol `
+                -NoRestart `
+                -ErrorAction Stop | Out-Null
+        }
+    }
+    catch
+    {
+        Write-D3PL0YWarning (
+            'No se pudo verificar o desactivar SMB1: {0}' -f
+            $_.Exception.Message
+        )
+    }
+
+    # No se deshabilita el cliente SMB2/3. Se bloquea únicamente la entrada
+    # para que C0NTR0L no publique carpetas hasta que se configure expresamente.
+    Get-NetFirewallRule `
+        -Name 'FPS-SMB-In-*' `
+        -ErrorAction SilentlyContinue |
+        Disable-NetFirewallRule -ErrorAction SilentlyContinue
+
+    Write-D3PL0YLog (
+        'Defender, Firewall, SmartScreen, UAC y Windows Update se mantienen activos; SMB entrante queda cerrado.'
+    ) 'OK'
+}
+
+function Install-D3PL0YHealthMonitoring
+{
+    $HealthFolder = Join-Path $LogFolder 'Health'
+    $HealthScriptPath = Join-Path $ConfigFolder 'C0NTR0L-HealthReport.ps1'
+    New-Item -ItemType Directory -Path $HealthFolder -Force | Out-Null
+
+    $HealthScript = @'
+$ErrorActionPreference = 'Continue'
+$HealthFolder = 'C:\D3PL0Y\Logs\Health'
+New-Item -ItemType Directory -Path $HealthFolder -Force | Out-Null
+$ReportPath = Join-Path $HealthFolder ('Health-{0}.txt' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$Lines = New-Object System.Collections.Generic.List[string]
+
+function Add-HealthLine
+{
+    param([object]$Value = '')
+    $script:Lines.Add([string]$Value)
+}
+
+Add-HealthLine '================================='
+Add-HealthLine 'C0NTR0L-SCR1PT - INFORME DE SALUD'
+Add-HealthLine '================================='
+Add-HealthLine ('Fecha: {0}' -f (Get-Date -Format 'dd/MM/yyyy HH:mm:ss'))
+Add-HealthLine ('Equipo: {0}' -f $env:COMPUTERNAME)
+
+try
+{
+    $Os = Get-CimInstance Win32_OperatingSystem
+    $Uptime = (Get-Date) - $Os.LastBootUpTime
+    Add-HealthLine ('Windows: {0} (build {1})' -f $Os.Caption, $Os.BuildNumber)
+    Add-HealthLine ('Tiempo encendido: {0} días, {1} horas, {2} minutos' -f $Uptime.Days, $Uptime.Hours, $Uptime.Minutes)
+}
+catch
+{
+    Add-HealthLine ('Windows/uptime: ERROR - {0}' -f $_.Exception.Message)
+}
+
+Add-HealthLine ''
+Add-HealthLine '[ESPACIO EN DISCOS]'
+try
+{
+    Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' |
+        Sort-Object DeviceID |
+        ForEach-Object {
+            $FreeGb = [math]::Round($_.FreeSpace / 1GB, 2)
+            $SizeGb = [math]::Round($_.Size / 1GB, 2)
+            $FreePercent = if ($_.Size -gt 0)
+            {
+                [math]::Round(($_.FreeSpace / $_.Size) * 100, 1)
+            }
+            else
+            {
+                0
+            }
+
+            Add-HealthLine ('{0} Libre {1} GB de {2} GB ({3}%)' -f $_.DeviceID, $FreeGb, $SizeGb, $FreePercent)
+        }
+}
+catch
+{
+    Add-HealthLine ('ERROR - {0}' -f $_.Exception.Message)
+}
+
+Add-HealthLine ''
+Add-HealthLine '[SALUD DE DISCOS FÍSICOS]'
+try
+{
+    if (Get-Command Get-PhysicalDisk -ErrorAction SilentlyContinue)
+    {
+        Get-PhysicalDisk |
+            Sort-Object FriendlyName |
+            ForEach-Object {
+                Add-HealthLine ('{0}: Health={1}; Operational={2}; Size={3} GB' -f $_.FriendlyName, $_.HealthStatus, ($_.OperationalStatus -join ','), [math]::Round($_.Size / 1GB, 2))
+            }
+    }
+    else
+    {
+        Get-CimInstance Win32_DiskDrive |
+            ForEach-Object {
+                Add-HealthLine ('{0}: Status={1}; Size={2} GB' -f $_.Model, $_.Status, [math]::Round($_.Size / 1GB, 2))
+            }
+    }
+}
+catch
+{
+    Add-HealthLine ('ERROR - {0}' -f $_.Exception.Message)
+}
+
+Add-HealthLine ''
+Add-HealthLine '[MICROSOFT DEFENDER]'
+try
+{
+    $Defender = Get-MpComputerStatus
+    Add-HealthLine ('Antivirus activo: {0}' -f $Defender.AntivirusEnabled)
+    Add-HealthLine ('Protección en tiempo real: {0}' -f $Defender.RealTimeProtectionEnabled)
+    Add-HealthLine ('Firma actualizada: {0}' -f $Defender.AntivirusSignatureLastUpdated)
+    Add-HealthLine ('Antispyware activo: {0}' -f $Defender.AntispywareEnabled)
+}
+catch
+{
+    Add-HealthLine ('ERROR - {0}' -f $_.Exception.Message)
+}
+
+Add-HealthLine ''
+Add-HealthLine '[WINDOWS UPDATE]'
+try
+{
+    $UpdateSession = New-Object -ComObject Microsoft.Update.Session
+    $UpdateSearcher = $UpdateSession.CreateUpdateSearcher()
+    $UpdateResult = $UpdateSearcher.Search('IsInstalled=0 and IsHidden=0')
+    Add-HealthLine ('Actualizaciones pendientes: {0}' -f $UpdateResult.Updates.Count)
+}
+catch
+{
+    Add-HealthLine ('ERROR - {0}' -f $_.Exception.Message)
+}
+
+Add-HealthLine ''
+Add-HealthLine '[CONECTIVIDAD]'
+try
+{
+    $HttpsOk = Test-NetConnection `
+        -ComputerName 'login.tailscale.com' `
+        -Port 443 `
+        -InformationLevel Quiet `
+        -WarningAction SilentlyContinue
+    Add-HealthLine ('Salida HTTPS: {0}' -f $HttpsOk)
+}
+catch
+{
+    Add-HealthLine ('Salida HTTPS: ERROR - {0}' -f $_.Exception.Message)
+}
+
+try
+{
+    $TailscaleService = Get-Service -Name Tailscale -ErrorAction Stop
+    Add-HealthLine ('Servicio Tailscale: {0}' -f $TailscaleService.Status)
+
+    $TailscaleCli = Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
+
+    if (Test-Path -LiteralPath $TailscaleCli -PathType Leaf)
+    {
+        $StatusText = & $TailscaleCli status --json 2>$null | Out-String
+        $Status = $StatusText | ConvertFrom-Json
+        Add-HealthLine ('Estado Tailscale: {0}' -f $Status.BackendState)
+        Add-HealthLine ('IP Tailscale: {0}' -f ($Status.TailscaleIPs -join ', '))
+    }
+}
+catch
+{
+    Add-HealthLine ('Tailscale: ERROR - {0}' -f $_.Exception.Message)
+}
+
+$Lines | Set-Content -LiteralPath $ReportPath -Encoding UTF8
+
+Get-ChildItem -LiteralPath $HealthFolder -Filter 'Health-*.txt' -File |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -Skip 26 |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+'@
+
+    Set-Content `
+        -LiteralPath $HealthScriptPath `
+        -Value $HealthScript `
+        -Encoding UTF8
+
+    $PowerShellExe = Join-Path `
+        $env:SystemRoot `
+        'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $TaskAction = New-ScheduledTaskAction `
+        -Execute $PowerShellExe `
+        -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $HealthScriptPath)
+    $TaskTrigger = New-ScheduledTaskTrigger `
+        -Weekly `
+        -DaysOfWeek Sunday `
+        -At ([datetime]::Today.AddHours(3))
+    $TaskPrincipal = New-ScheduledTaskPrincipal `
+        -UserId 'SYSTEM' `
+        -LogonType ServiceAccount `
+        -RunLevel Highest
+    $TaskSettings = New-ScheduledTaskSettingsSet `
+        -StartWhenAvailable `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 20)
+
+    Register-ScheduledTask `
+        -TaskName 'D3PL0Y-C0NTR0L-Health' `
+        -Action $TaskAction `
+        -Trigger $TaskTrigger `
+        -Principal $TaskPrincipal `
+        -Settings $TaskSettings `
+        -Description 'Informe semanal de salud de C0NTR0L-SCR1PT.' `
+        -Force | Out-Null
+
+    Write-D3PL0YLog (
+        'Informe semanal registrado: domingos a las 03:00 en C:\D3PL0Y\Logs\Health.'
+    ) 'OK'
+}
+
 function Select-D3PL0YProfile
 {
     param(
@@ -882,11 +1750,14 @@ function Select-D3PL0YProfile
         Write-Host '╔════════════════════════════════════════════════════╗' -ForegroundColor DarkGreen
         Write-Host '║              SELECCIONA EL D3PL0Y                  ║' -ForegroundColor Green
         Write-Host '╠════════════════════════════════════════════════════╣' -ForegroundColor DarkGreen
-        Write-Host '║ [1] T3ST-SCR1PT                                    ║' -ForegroundColor Green
+        Write-Host '║ [1] P0RT4L-SCR1PT                                  ║' -ForegroundColor Green
         Write-Host '║     Equipo general: Chrome, Drive y Tailscale      ║' -ForegroundColor Gray
         Write-Host '║                                                    ║' -ForegroundColor DarkGreen
         Write-Host '║ [2] STUD10-SCR1PT                                  ║' -ForegroundColor Magenta
         Write-Host '║     Edición: añade Audacity y GIMP                 ║' -ForegroundColor Gray
+        Write-Host '║                                                    ║' -ForegroundColor DarkGreen
+        Write-Host '║ [3] C0NTR0L-SCR1PT                                 ║' -ForegroundColor Gray
+        Write-Host '║     Administración y disponibilidad 24/7           ║' -ForegroundColor Gray
         Write-Host '║                                                    ║' -ForegroundColor DarkGreen
         Write-Host '║ [0] Cancelar                                       ║' -ForegroundColor Yellow
         Write-Host '╚════════════════════════════════════════════════════╝' -ForegroundColor DarkGreen
@@ -894,14 +1765,19 @@ function Select-D3PL0YProfile
         $Choice = Read-Host 'Selecciona una opción'
         $NormalizedChoice = $Choice.Trim().ToUpperInvariant()
 
-        if ($NormalizedChoice -in @('1', 'T3ST', 'T3ST-SCR1PT'))
+        if ($NormalizedChoice -in @('1', 'P0RT4L', 'P0RT4L-SCR1PT'))
         {
-            return 'T3ST-SCR1PT'
+            return 'P0RT4L-SCR1PT'
         }
 
         if ($NormalizedChoice -in @('2', 'STUD10', 'STUD10-SCR1PT'))
         {
             return 'STUD10-SCR1PT'
+        }
+
+        if ($NormalizedChoice -in @('3', 'C0NTR0L', 'C0NTR0L-SCR1PT'))
+        {
+            return 'C0NTR0L-SCR1PT'
         }
 
         if ($NormalizedChoice -in @('0', 'Q', 'S', 'SALIR', 'CANCELAR'))
@@ -910,7 +1786,7 @@ function Select-D3PL0YProfile
         }
 
         Write-Host ''
-        Write-Host 'Selección no válida. Usa 1, 2 o 0.' -ForegroundColor Red
+        Write-Host 'Selección no válida. Usa 1, 2, 3 o 0.' -ForegroundColor Red
     }
 }
 
@@ -1010,6 +1886,22 @@ else
 {
     'OneDrive y aplicaciones innecesarias eliminadas'
 }
+$PowerSummary = if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
+{
+    '24/7 con corriente; pantalla a 10 minutos; tapa sin acción; batería sin modificar'
+}
+else
+{
+    'Sin suspensión con corriente; pantalla a 20 minutos; batería 30/10 minutos'
+}
+$ControlSummary = if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
+{
+    'Tailscale desatendido, RDP+NLA limitado a Tailscale, seguridad reforzada e informe semanal'
+}
+else
+{
+    'No corresponde a este perfil'
+}
 
 Set-D3PL0YStatus ('INICIANDO {0}' -f $SelectedD3PL0Y)
 Write-D3PL0YLog ('Perfil seleccionado: {0}' -f $SelectedD3PL0Y) 'OK'
@@ -1099,15 +1991,36 @@ if (-not $PreflightPassed)
     throw 'D3PL0Y se ha detenido porque falló una comprobación previa.'
 }
 
+Invoke-D3PL0YStep -Name 'Asignar nombre de equipo' -Action {
+
+    Set-D3PL0YComputerName `
+        -TargetName $SelectedConfig.TargetComputerName
+} | Out-Null
+
 Invoke-D3PL0YStep -Name 'Configurar energía' -Action {
 
-    $PowerCommands = @(
-        @('-h', 'off'),
-        @('/change', 'standby-timeout-ac', '0'),
-        @('/change', 'monitor-timeout-ac', '20'),
-        @('/change', 'standby-timeout-dc', '30'),
-        @('/change', 'monitor-timeout-dc', '10')
-    )
+    if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
+    {
+        # C0NTR0L solo modifica el comportamiento conectado a corriente.
+        # Las opciones de batería quedan exactamente como estuvieran.
+        $PowerCommands = @(
+            @('-h', 'off'),
+            @('/change', 'standby-timeout-ac', '0'),
+            @('/change', 'monitor-timeout-ac', '10'),
+            @('/setacvalueindex', 'scheme_current', 'sub_buttons', 'lidaction', '0'),
+            @('/setactive', 'scheme_current')
+        )
+    }
+    else
+    {
+        $PowerCommands = @(
+            @('-h', 'off'),
+            @('/change', 'standby-timeout-ac', '0'),
+            @('/change', 'monitor-timeout-ac', '20'),
+            @('/change', 'standby-timeout-dc', '30'),
+            @('/change', 'monitor-timeout-dc', '10')
+        )
+    }
 
     foreach ($Arguments in $PowerCommands)
     {
@@ -1120,6 +2033,21 @@ Invoke-D3PL0YStep -Name 'Configurar energía' -Action {
                 ($Arguments -join ' ')
             )
         }
+    }
+
+    if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
+    {
+        Set-D3PL0YRegistryValue `
+            -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' `
+            -Name 'HiberbootEnabled' `
+            -Value 0 `
+            -Type DWord
+
+        Write-D3PL0YLog (
+            'C0NTR0L: sin suspensión con corriente, pantalla a 10 minutos, ' +
+            'tapa sin acción, hibernación e inicio rápido desactivados. ' +
+            'No se han modificado las opciones de batería.'
+        ) 'OK'
     }
 } | Out-Null
 
@@ -1268,37 +2196,37 @@ Invoke-D3PL0YStep -Name 'Configurar privacidad y sugerencias' -Action {
 
 Invoke-D3PL0YStep -Name 'Optimizar componentes de Windows 11' -Action {
 
-    Set-D3PL0YRegistryValue `
+    Set-D3PL0YOptionalRegistryValue `
         -Path 'HKCU:\Software\Policies\Microsoft\Windows\Explorer' `
         -Name 'DisableSearchBoxSuggestions' `
         -Value 1 `
         -Type DWord
 
-    Set-D3PL0YRegistryValue `
+    Set-D3PL0YOptionalRegistryValue `
         -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' `
         -Name 'AllowNewsAndInterests' `
         -Value 0 `
         -Type DWord
 
-    Set-D3PL0YRegistryValue `
+    Set-D3PL0YOptionalRegistryValue `
         -Path 'HKCU:\System\GameConfigStore' `
         -Name 'GameDVR_Enabled' `
         -Value 0 `
         -Type DWord
 
-    Set-D3PL0YRegistryValue `
+    Set-D3PL0YOptionalRegistryValue `
         -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR' `
         -Name 'AppCaptureEnabled' `
         -Value 0 `
         -Type DWord
 
-    Set-D3PL0YRegistryValue `
+    Set-D3PL0YOptionalRegistryValue `
         -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' `
         -Name 'AllowGameDVR' `
         -Value 0 `
         -Type DWord
 
-    Set-D3PL0YRegistryValue `
+    Set-D3PL0YOptionalRegistryValue `
         -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
         -Name 'LongPathsEnabled' `
         -Value 1 `
@@ -1333,6 +2261,29 @@ Invoke-D3PL0YStep -Name 'Instalar aplicaciones' -Action {
         )
     }
 } | Out-Null
+
+if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
+{
+    Invoke-D3PL0YStep -Name 'Reforzar seguridad de C0NTR0L' -Action {
+
+        Set-D3PL0YSecurityBaseline
+    } | Out-Null
+
+    Invoke-D3PL0YStep -Name 'Configurar Tailscale desatendido' -Action {
+
+        Enable-D3PL0YTailscaleUnattended
+    } | Out-Null
+
+    Invoke-D3PL0YStep -Name 'Configurar Escritorio remoto seguro' -Action {
+
+        Enable-D3PL0YRemoteDesktop
+    } | Out-Null
+
+    Invoke-D3PL0YStep -Name 'Programar informe semanal de salud' -Action {
+
+        Install-D3PL0YHealthMonitoring
+    } | Out-Null
+}
 
 Invoke-D3PL0YStep -Name 'Aplicar tema oscuro y configurar Explorador' -Action {
 
@@ -1766,6 +2717,7 @@ Perfil: $SelectedD3PL0Y
 Fecha: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
 Estado: $FinalStatus
 Equipo: $env:COMPUTERNAME
+Nombre objetivo: $($SelectedConfig.TargetComputerName)
 Usuario: $env:USERNAME
 
 Fases completadas: $script:SuccessCount
@@ -1781,6 +2733,8 @@ $LogFile
 Notas:
 - Aplicaciones del perfil: $InstalledAppSummary.
 - Limpieza de Windows: $DebloatSummary.
+- Energía: $PowerSummary.
+- Funciones C0NTR0L: $ControlSummary.
 - Paleta: $($SelectedConfig.ThemeName) — principal $($SelectedConfig.PrimaryColor), secundaria $($SelectedConfig.SecondaryColor), suave $($SelectedConfig.SoftColor).
 - Fondo de escritorio: $($SelectedConfig.Wallpaper).
 - Pantalla de bloqueo: $($SelectedConfig.Lockscreen).
