@@ -35,7 +35,7 @@ El script asigna al equipo el nombre del perfil, instala sus aplicaciones, elimi
 Abre **Windows PowerShell como administrador** y ejecuta:
 
 ```powershell
-irm https://lavueltitaironica.com/install | iex
+irm https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main/D3PL0Y.ps1 | iex
 ```
 
 D3PL0Y mostrará el selector interactivo:
@@ -396,7 +396,7 @@ D3PL0Y no realiza las siguientes acciones:
 La instalación remota es cómoda, pero ejecutar código directamente desde una URL implica confiar en el contenido servido en ese momento. Para revisarlo antes, descárgalo sin ejecutarlo:
 
 ```powershell
-Invoke-WebRequest https://lavueltitaironica.com/install -OutFile .\D3PL0Y.ps1
+Invoke-WebRequest https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main/D3PL0Y.ps1 -OutFile .\D3PL0Y.ps1
 notepad .\D3PL0Y.ps1
 ```
 

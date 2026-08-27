@@ -62,7 +62,7 @@
     Los fondos se actualizan siempre para asegurar la versión del repositorio.
 
 .EXAMPLE
-    irm https://lavueltitaironica.com/install | iex
+    irm https://raw.githubusercontent.com/t3st-scr1pt/D3PL0Y/main/D3PL0Y.ps1 | iex
 
 .EXAMPLE
     .\D3PL0Y.ps1 -D3PL0YProfile STUD10-SCR1PT
