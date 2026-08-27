@@ -78,9 +78,9 @@ $script:Catalog = [pscustomobject]@{
         [pscustomobject]@{
             id = 'd3pl0y'
             name = 'D3PL0Y'
-            description = 'Despliega y configura Windows 11 mediante los perfiles P0RT4L, STUD10 y C0NTR0L.'
+            description = 'Despliega y configura Windows 11 mediante los perfiles P0RT4L, STUD10, C0NTR0L y P3D4L.'
             category = 'Despliegue'
-            version = '2.2.1'
+            version = '2.3.0'
             url = '{0}/D3PL0Y.ps1' -f $script:ScriptsRaw
             requiresAdmin = $true
             minPowerShell = '5.1'

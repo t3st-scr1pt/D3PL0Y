@@ -4,12 +4,12 @@
 
 ### Despliegue automatizado y modular para Windows 11
 
-[![Versión](https://img.shields.io/badge/versión-2.2.1-107C10?style=for-the-badge)](./D3PL0Y.ps1)
+[![Versión](https://img.shields.io/badge/versión-2.3.0-E05A00?style=for-the-badge)](./D3PL0Y.ps1)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?style=for-the-badge&logo=windows11&logoColor=white)
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?style=for-the-badge&logo=powershell&logoColor=white)
-![Perfiles](https://img.shields.io/badge/perfiles-3-602071?style=for-the-badge)
+![Perfiles](https://img.shields.io/badge/perfiles-4-602071?style=for-the-badge)
 
-**Un único instalador. Tres perfiles. Menos configuración manual y menos oportunidades para que Windows improvise.**
+**Un único instalador. Cuatro perfiles. Menos configuración manual y menos oportunidades para que Windows improvise.**
 
 <img src="./wallpapers/p0rt4l-scr1pt.png" alt="Wallpaper P0RT4L-SCR1PT" width="900">
 
@@ -19,11 +19,12 @@
 
 ## ¿Qué es D3PL0Y?
 
-**D3PL0Y** es un script de PowerShell que prepara equipos con Windows 11 mediante una configuración común y tres perfiles especializados:
+**D3PL0Y** es un script de PowerShell que prepara equipos con Windows 11 mediante una configuración común y cuatro perfiles especializados:
 
 - **P0RT4L-SCR1PT**, para uso general, movilidad y trabajo diario.
 - **STUD10-SCR1PT**, para edición de imagen, vídeo y música.
 - **C0NTR0L-SCR1PT**, para administración, supervisión y disponibilidad 24/7.
+- **P3D4L-SCR1PT**, para una pedalera digital de guitarra estable y de baja latencia.
 
 El script asigna al equipo el nombre del perfil, instala sus aplicaciones, elimina bloatware seleccionado, aplica ajustes de privacidad y productividad, configura su identidad visual y genera registros de toda la ejecución.
 
@@ -52,6 +53,9 @@ D3PL0Y mostrará el selector interactivo:
 ║ [3] C0NTR0L-SCR1PT                                 ║
 ║     Administración y disponibilidad 24/7           ║
 ║                                                    ║
+║ [4] P3D4L-SCR1PT                                   ║
+║     Pedalera digital de guitarra                   ║
+║                                                    ║
 ║ [0] Cancelar                                       ║
 ╚════════════════════════════════════════════════════╝
 ```
@@ -63,25 +67,27 @@ D3PL0Y mostrará el selector interactivo:
 
 ## Perfiles disponibles
 
-| Característica | P0RT4L | STUD10 | C0NTR0L |
-|---|:---:|:---:|:---:|
-| Google Chrome | ✅ | ✅ | ✅ |
-| Google Drive | ✅ | ✅ | ✅ |
-| Tailscale | ✅ | ✅ | ✅ |
-| Audacity | ❌ | ✅ | ❌ |
-| GIMP 3 | ❌ | ✅ | ❌ |
-| PowerShell 7 | ❌ | ❌ | ✅ |
-| Visual Studio Code | ❌ | ❌ | ✅ |
-| Renombrado automático del equipo | ✅ | ✅ | ✅ |
-| Configuración general de Windows | ✅ | ✅ | ✅ |
-| Debloat seleccionado | ✅ | ✅ | ✅ |
-| Tema oscuro y paleta propia | ✅ | ✅ | ✅ |
-| Cursores D3PL0Y | ✅ | ✅ | ✅ |
-| Wallpaper y pantalla de bloqueo propios | ✅ | ✅ | ✅ |
-| Tailscale desatendido | ❌ | ❌ | ✅ |
-| RDP con NLA limitado a Tailscale | ❌ | ❌ | ✅* |
-| Refuerzo de seguridad | ❌ | ❌ | ✅ |
-| Informe semanal de salud | ❌ | ❌ | ✅ |
+| Característica | P0RT4L | STUD10 | C0NTR0L | P3D4L |
+|---|:---:|:---:|:---:|:---:|
+| Google Chrome | ✅ | ✅ | ✅ | ✅ |
+| Google Drive | ✅ | ✅ | ✅ | ✅ |
+| Tailscale | ✅ | ✅ | ✅ | ✅ |
+| Audacity | ❌ | ✅ | ❌ | ❌ |
+| GIMP 3 | ❌ | ✅ | ❌ | ❌ |
+| PowerShell 7 | ❌ | ❌ | ✅ | ❌ |
+| Visual Studio Code | ❌ | ❌ | ✅ | ❌ |
+| Renombrado automático del equipo | ✅ | ✅ | ✅ | ✅ |
+| Configuración general de Windows | ✅ | ✅ | ✅ | ✅ |
+| Debloat seleccionado | ✅ | ✅ | ✅ | ✅ |
+| Tema oscuro y paleta propia | ✅ | ✅ | ✅ | ✅ |
+| Cursores D3PL0Y | ✅ | ✅ | ✅ | ✅ |
+| Wallpaper y pantalla de bloqueo propios | ✅ | ✅ | ✅ | ✅ |
+| Tailscale desatendido | ❌ | ❌ | ✅ | ❌ |
+| RDP con NLA limitado a Tailscale | ❌ | ❌ | ✅* | ❌ |
+| Refuerzo de seguridad | ❌ | ❌ | ✅ | ❌ |
+| Informe semanal de salud | ❌ | ❌ | ✅ | ❌ |
+| Preparación para audio USB | ❌ | ❌ | ❌ | ✅ |
+| Sonidos y notificaciones silenciados | ❌ | ❌ | ❌ | ✅ |
 
 \* El servidor RDP entrante requiere una edición compatible de Windows, como Pro, Enterprise o Education.
 
@@ -132,13 +138,30 @@ También prepara Tailscale en modo desatendido, protege el acceso RDP, refuerza 
 </tr>
 </table>
 
+### P3D4L-SCR1PT
+
+Perfil para convertir un portátil en una pedalera digital de guitarra dedicada. Instala Chrome, Drive y Tailscale, configura el nombre `P3D4L-SCR1PT` y aplica una paleta ámbar con color principal `#E05A00`.
+
+Con corriente evita la suspensión, mantiene el equipo activo al cerrar la tapa, desactiva el ahorro selectivo de USB y el ahorro de enlace PCIe. También silencia las notificaciones emergentes, los pitidos y los sonidos del sistema, y crea `C:\GUITAR_RIG\ACTIVE` como ubicación local para el banco de sonidos que se utilice en directo.
+
+<table>
+<tr>
+<td align="center"><strong>Escritorio</strong></td>
+<td align="center"><strong>Pantalla de bloqueo</strong></td>
+</tr>
+<tr>
+<td><img src="./wallpapers/p3d4l-scr1pt.png" alt="P3D4L-SCR1PT desktop" width="430"></td>
+<td><img src="./wallpapers/p3d4l-scr1pt_lockscreen.png" alt="P3D4L-SCR1PT lockscreen" width="430"></td>
+</tr>
+</table>
+
 ---
 
 ## Configuración aplicada
 
 ### Sistema y energía
 
-Los tres perfiles:
+Los cuatro perfiles:
 
 - Desactivan la hibernación.
 - Actualizan las fuentes de WinGet antes de instalar aplicaciones.
@@ -146,14 +169,16 @@ Los tres perfiles:
 
 El comportamiento energético depende del perfil:
 
-| Ajuste | P0RT4L / STUD10 | C0NTR0L |
-|---|---|---|
-| Suspensión con corriente | Desactivada | Desactivada |
-| Pantalla con corriente | 20 minutos | 10 minutos |
-| Suspensión con batería | 30 minutos | No se modifica |
-| Pantalla con batería | 10 minutos | No se modifica |
-| Cerrar la tapa con corriente | Configuración existente | Sin acción |
-| Inicio rápido | Configuración existente | Desactivado |
+| Ajuste | P0RT4L / STUD10 | C0NTR0L | P3D4L |
+|---|---|---|---|
+| Suspensión con corriente | Desactivada | Desactivada | Desactivada |
+| Pantalla con corriente | 20 minutos | 10 minutos | 20 minutos |
+| Suspensión con batería | 30 minutos | No se modifica | 30 minutos |
+| Pantalla con batería | 10 minutos | No se modifica | 10 minutos |
+| Cerrar la tapa con corriente | Configuración existente | Sin acción | Sin acción |
+| Ahorro selectivo USB con corriente | Configuración existente | Configuración existente | Desactivado |
+| Ahorro de enlace PCIe con corriente | Configuración existente | Configuración existente | Desactivado |
+| Inicio rápido | Configuración existente | Desactivado | Desactivado |
 
 ### Privacidad y contenido promocional
 
@@ -261,11 +286,15 @@ cd D3PL0Y
 .\D3PL0Y.ps1 -D3PL0YProfile C0NTR0L-SCR1PT
 ```
 
+```powershell
+.\D3PL0Y.ps1 -D3PL0YProfile P3D4L-SCR1PT
+```
+
 ### Parámetros disponibles
 
 | Parámetro | Descripción |
 |---|---|
-| `-D3PL0YProfile` | Selecciona `P0RT4L-SCR1PT`, `STUD10-SCR1PT` o `C0NTR0L-SCR1PT`. |
+| `-D3PL0YProfile` | Selecciona `P0RT4L-SCR1PT`, `STUD10-SCR1PT`, `C0NTR0L-SCR1PT` o `P3D4L-SCR1PT`. |
 | `-NoRestart` | Evita el reinicio automático al terminar. |
 | `-SkipDebloat` | Omite la desinstalación de OneDrive y de las aplicaciones preinstaladas. |
 | `-RefreshAssets` | Fuerza una nueva descarga de los cursores. Los fondos se actualizan siempre. |
@@ -331,13 +360,15 @@ D3PL0Y/
 │   ├── stud10-scr1pt.png
 │   ├── stud10-scr1pt_lockscreen.png
 │   ├── c0ntr0l-scr1pt.png
-│   └── c0ntr0l-scr1pt_lockscreen.png
+│   ├── c0ntr0l-scr1pt_lockscreen.png
+│   ├── p3d4l-scr1pt.png
+│   └── p3d4l-scr1pt_lockscreen.png
 ├── D3PL0Y.ps1
 ├── README.md
 └── Tweaks.reg
 ```
 
-Los nombres de los seis recursos visuales deben mantenerse exactamente como aparecen, ya que D3PL0Y los descarga según el perfil seleccionado.
+Los nombres de los ocho recursos visuales deben mantenerse exactamente como aparecen, ya que D3PL0Y los descarga según el perfil seleccionado.
 
 ---
 
@@ -354,6 +385,7 @@ D3PL0Y no realiza las siguientes acciones:
 - No copia credenciales ni automatiza el inicio de sesión de Google Drive, Chrome o Tailscale.
 - No instala Audacity ni GIMP fuera del perfil STUD10.
 - No instala PowerShell 7 ni Visual Studio Code fuera del perfil C0NTR0L.
+- No instala todavía NAM, un anfitrión de plugins ni controladores de interfaces de audio: se incorporarán al perfil P3D4L cuando la cadena definitiva esté validada.
 - No habilita RDP entrante en ediciones de Windows que no incluyen el servidor de Escritorio remoto.
 - No oculta los errores: cada fase queda reflejada en el resumen y en el registro completo.
 
@@ -378,12 +410,13 @@ Después de revisarlo:
 
 ## Estado del proyecto
 
-**Versión actual: 2.2.1**
+**Versión actual: 2.3.0**
 
-- Selector interactivo con tres perfiles.
+- Selector interactivo con cuatro perfiles.
 - Aplicaciones, nombres de equipo, paletas y fondos independientes.
 - Limpieza conservadora de Windows y ajustes comunes de privacidad.
 - Perfil C0NTR0L con configuración 24/7, seguridad, RDP por Tailscale e informe semanal.
+- Perfil P3D4L dedicado a audio USB, sin interrupciones y con banco activo local.
 - Registro detallado de fases, avisos y errores.
 - Reinicio automático salvo uso explícito de `-NoRestart`.
 

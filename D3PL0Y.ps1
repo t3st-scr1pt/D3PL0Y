@@ -3,12 +3,12 @@
 
 <#
 .SYNOPSIS
-    D3PL0Y v2.2.0
+    D3PL0Y v2.3.0
 
 .DESCRIPTION
     Configura un equipo con Windows 11 de forma sencilla y fiable.
 
-    D3PL0Y permite elegir entre tres perfiles:
+    D3PL0Y permite elegir entre cuatro perfiles:
 
     P0RT4L-SCR1PT:
     - Configuración general del equipo.
@@ -26,19 +26,27 @@
     - Prepara Tailscale desatendido, RDP con NLA limitado a Tailscale y WOL.
     - Genera un informe de salud semanal del equipo.
 
-    Los tres perfiles:
+    P3D4L-SCR1PT:
+    - Configuración dedicada para una pedalera digital de guitarra.
+    - Instala Chrome, Google Drive y Tailscale.
+    - Evita suspensión con corriente, mantiene activa la tapa y estabiliza USB.
+    - Silencia sonidos y notificaciones y crea C:\GUITAR_RIG\ACTIVE.
+    - Aplica los fondos específicos de P3D4L-SCR1PT.
+
+    Los cuatro perfiles:
     - Cambian el nombre del equipo para que coincida con el perfil.
     - Configuran las opciones de energía.
     - Desinstalan OneDrive y eliminan To Do, Xbox/Xbox Live y bloatware.
     - Reducen publicidad, sugerencias y telemetría.
     - Desactivan Widgets, Game DVR, búsquedas web y experiencias promocionales.
     - Aplican ajustes seguros de productividad y privacidad en Windows 11.
-    - Usan una paleta verde en P0RT4L, morada en STUD10 y gris en C0NTR0L.
+    - Usan una paleta verde en P0RT4L, morada en STUD10, gris en C0NTR0L
+      y ámbar en P3D4L.
     - Descargan y aplican cursores, fondo de escritorio y pantalla de bloqueo.
 
 .PARAMETER D3PL0YProfile
-    Selecciona directamente P0RT4L-SCR1PT, STUD10-SCR1PT o
-    C0NTR0L-SCR1PT.
+    Selecciona directamente P0RT4L-SCR1PT, STUD10-SCR1PT,
+    C0NTR0L-SCR1PT o P3D4L-SCR1PT.
     Si no se indica, D3PL0Y mostrará un menú interactivo.
 
 .PARAMETER NoRestart
@@ -61,6 +69,9 @@
 
 .EXAMPLE
     .\D3PL0Y.ps1 -D3PL0YProfile C0NTR0L-SCR1PT
+
+.EXAMPLE
+    .\D3PL0Y.ps1 -D3PL0YProfile P3D4L-SCR1PT
 
 .EXAMPLE
     .\D3PL0Y.ps1 -NoRestart
@@ -86,7 +97,7 @@ $ProgressPreference = 'SilentlyContinue'
 # =============================================================================
 
 $ProjectName = 'D3PL0Y'
-$Version = '2.2.0'
+$Version = '2.3.0'
 
 $RootFolder = 'C:\D3PL0Y'
 $LogFolder = Join-Path $RootFolder 'Logs'
@@ -218,6 +229,44 @@ $D3PL0YProfiles = [ordered]@{
         )
         UiColor = 'Gray'
         UiDarkColor = 'DarkGray'
+    }
+
+    'P3D4L-SCR1PT' = [pscustomobject]@{
+        DisplayName = 'P3D4L-SCR1PT'
+        TargetComputerName = 'P3D4L-SCR1PT'
+        Description = 'D3PL0Y dedicado a una pedalera digital de guitarra de baja latencia.'
+        Apps = @(
+            'Google.Chrome',
+            'Google.GoogleDrive',
+            'Tailscale.Tailscale'
+        )
+        AppNames = @(
+            'Google Chrome',
+            'Google Drive',
+            'Tailscale'
+        )
+        Wallpaper = 'p3d4l-scr1pt.png'
+        Lockscreen = 'p3d4l-scr1pt_lockscreen.png'
+        ThemeName = 'ámbar P3D4L'
+        PrimaryColor = '#E05A00'
+        SecondaryColor = '#8A3100'
+        SoftColor = '#FFD0A6'
+        AccentColor = 0xFF005AE0
+        ColorizationColor = 0xC4005AE0
+        AccentColorMenu = 0xFF005AE0
+        StartColorMenu = 0xFF00318A
+        AccentPalette = [byte[]](
+            0xA6,0xD0,0xFF,0x00,
+            0x66,0xAD,0xFF,0x00,
+            0x28,0x7C,0xF5,0x00,
+            0x00,0x5A,0xE0,0x00,
+            0x00,0x47,0xB5,0x00,
+            0x00,0x2E,0x7A,0x00,
+            0x00,0x18,0x41,0x00,
+            0x4C,0x4A,0x48,0x00
+        )
+        UiColor = 'DarkYellow'
+        UiDarkColor = 'DarkRed'
     }
 }
 
@@ -1759,6 +1808,9 @@ function Select-D3PL0YProfile
         Write-Host '║ [3] C0NTR0L-SCR1PT                                 ║' -ForegroundColor Gray
         Write-Host '║     Administración y disponibilidad 24/7           ║' -ForegroundColor Gray
         Write-Host '║                                                    ║' -ForegroundColor DarkGreen
+        Write-Host '║ [4] P3D4L-SCR1PT                                   ║' -ForegroundColor DarkYellow
+        Write-Host '║     Pedalera digital de guitarra                   ║' -ForegroundColor Gray
+        Write-Host '║                                                    ║' -ForegroundColor DarkGreen
         Write-Host '║ [0] Cancelar                                       ║' -ForegroundColor Yellow
         Write-Host '╚════════════════════════════════════════════════════╝' -ForegroundColor DarkGreen
 
@@ -1780,13 +1832,18 @@ function Select-D3PL0YProfile
             return 'C0NTR0L-SCR1PT'
         }
 
+        if ($NormalizedChoice -in @('4', 'P3D4L', 'P3D4L-SCR1PT'))
+        {
+            return 'P3D4L-SCR1PT'
+        }
+
         if ($NormalizedChoice -in @('0', 'Q', 'S', 'SALIR', 'CANCELAR'))
         {
             return $null
         }
 
         Write-Host ''
-        Write-Host 'Selección no válida. Usa 1, 2, 3 o 0.' -ForegroundColor Red
+        Write-Host 'Selección no válida. Usa 1, 2, 3, 4 o 0.' -ForegroundColor Red
     }
 }
 
@@ -1886,17 +1943,32 @@ else
 {
     'OneDrive y aplicaciones innecesarias eliminadas'
 }
-$PowerSummary = if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
+$PowerSummary = switch ($SelectedD3PL0Y)
 {
-    '24/7 con corriente; pantalla a 10 minutos; tapa sin acción; batería sin modificar'
-}
-else
-{
-    'Sin suspensión con corriente; pantalla a 20 minutos; batería 30/10 minutos'
+    'C0NTR0L-SCR1PT'
+    {
+        '24/7 con corriente; pantalla a 10 minutos; tapa sin acción; batería sin modificar'
+    }
+    'P3D4L-SCR1PT'
+    {
+        'Audio estable con corriente; tapa sin acción; USB y PCIe sin ahorro; batería 30/10 minutos'
+    }
+    default
+    {
+        'Sin suspensión con corriente; pantalla a 20 minutos; batería 30/10 minutos'
+    }
 }
 $ControlSummary = if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
 {
     'Tailscale desatendido, RDP+NLA limitado a Tailscale, seguridad reforzada e informe semanal'
+}
+else
+{
+    'No corresponde a este perfil'
+}
+$PedalSummary = if ($SelectedD3PL0Y -eq 'P3D4L-SCR1PT')
+{
+    'C:\GUITAR_RIG\ACTIVE, USB/PCIe sin ahorro con corriente y sistema sin avisos sonoros'
 }
 else
 {
@@ -2011,6 +2083,22 @@ Invoke-D3PL0YStep -Name 'Configurar energía' -Action {
             @('/setactive', 'scheme_current')
         )
     }
+    elseif ($SelectedD3PL0Y -eq 'P3D4L-SCR1PT')
+    {
+        # P3D4L prioriza una interfaz USB estable durante los ensayos sin
+        # convertir el portátil en un equipo permanentemente acelerado.
+        $PowerCommands = @(
+            @('-h', 'off'),
+            @('/change', 'standby-timeout-ac', '0'),
+            @('/change', 'monitor-timeout-ac', '20'),
+            @('/change', 'standby-timeout-dc', '30'),
+            @('/change', 'monitor-timeout-dc', '10'),
+            @('/setacvalueindex', 'scheme_current', 'sub_buttons', 'lidaction', '0'),
+            @('/setacvalueindex', 'scheme_current', 'sub_usb', 'usbselective', '0'),
+            @('/setacvalueindex', 'scheme_current', 'sub_pciexpress', 'aspm', '0'),
+            @('/setactive', 'scheme_current')
+        )
+    }
     else
     {
         $PowerCommands = @(
@@ -2047,6 +2135,20 @@ Invoke-D3PL0YStep -Name 'Configurar energía' -Action {
             'C0NTR0L: sin suspensión con corriente, pantalla a 10 minutos, ' +
             'tapa sin acción, hibernación e inicio rápido desactivados. ' +
             'No se han modificado las opciones de batería.'
+        ) 'OK'
+    }
+    elseif ($SelectedD3PL0Y -eq 'P3D4L-SCR1PT')
+    {
+        Set-D3PL0YRegistryValue `
+            -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' `
+            -Name 'HiberbootEnabled' `
+            -Value 0 `
+            -Type DWord
+
+        Write-D3PL0YLog (
+            'P3D4L: sin suspensión con corriente, tapa sin acción, ' +
+            'ahorro USB y PCIe desactivado con corriente, hibernación e ' +
+            'inicio rápido desactivados.'
         ) 'OK'
     }
 } | Out-Null
@@ -2261,6 +2363,59 @@ Invoke-D3PL0YStep -Name 'Instalar aplicaciones' -Action {
         )
     }
 } | Out-Null
+
+if ($SelectedD3PL0Y -eq 'P3D4L-SCR1PT')
+{
+    Invoke-D3PL0YStep -Name 'Preparar entorno de pedalera' -Action {
+
+        $ActiveRigFolder = 'C:\GUITAR_RIG\ACTIVE'
+
+        if (-not (Test-Path -LiteralPath $ActiveRigFolder -PathType Container))
+        {
+            New-Item `
+                -Path $ActiveRigFolder `
+                -ItemType Directory `
+                -Force | Out-Null
+        }
+
+        Set-D3PL0YRegistryValue `
+            -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications' `
+            -Name 'ToastEnabled' `
+            -Value 0 `
+            -Type DWord
+
+        Set-D3PL0YRegistryValue `
+            -Path 'HKCU:\Control Panel\Sound' `
+            -Name 'Beep' `
+            -Value 'No' `
+            -Type String
+
+        Set-D3PL0YRegistryValue `
+            -Path 'HKCU:\Control Panel\Sound' `
+            -Name 'ExtendedSounds' `
+            -Value 'No' `
+            -Type String
+
+        $SoundScheme = 'HKCU:\AppEvents\Schemes'
+
+        if (Test-Path -LiteralPath $SoundScheme)
+        {
+            Set-Item -LiteralPath $SoundScheme -Value '.None' -Force
+
+            Get-ChildItem `
+                -Path 'HKCU:\AppEvents\Schemes\Apps\*\*\.Current' `
+                -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                    Set-Item -LiteralPath $_.PSPath -Value '' -Force
+                }
+        }
+
+        Write-D3PL0YLog (
+            'P3D4L preparado: C:\GUITAR_RIG\ACTIVE creado; ' +
+            'notificaciones emergentes, pitidos y sonidos del sistema desactivados.'
+        ) 'OK'
+    } | Out-Null
+}
 
 if ($SelectedD3PL0Y -eq 'C0NTR0L-SCR1PT')
 {
@@ -2735,6 +2890,7 @@ Notas:
 - Limpieza de Windows: $DebloatSummary.
 - Energía: $PowerSummary.
 - Funciones C0NTR0L: $ControlSummary.
+- Funciones P3D4L: $PedalSummary.
 - Paleta: $($SelectedConfig.ThemeName) — principal $($SelectedConfig.PrimaryColor), secundaria $($SelectedConfig.SecondaryColor), suave $($SelectedConfig.SoftColor).
 - Fondo de escritorio: $($SelectedConfig.Wallpaper).
 - Pantalla de bloqueo: $($SelectedConfig.Lockscreen).
